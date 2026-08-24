@@ -3,17 +3,61 @@ import type { Sale } from "./types";
 
 const DB_NAME = "sunbite-pdv";
 const STORE = "sales";
+const DB_VERSION = 2;
 
 let dbp: Promise<IDBPDatabase> | null = null;
 
+/**
+ * true se a migracao para v2 falhou e o banco caiu de volta para v1.
+ * Sales continua funcionando; os modulos novos (Etapa 6+) nao tem onde
+ * gravar fila/cache/log ate o celular conseguir migrar de verdade.
+ * A tela de Sistema (Etapa 5) le esta flag.
+ */
+export let dbDegraded = false;
+
+function createSalesStore(d: IDBPDatabase) {
+  const s = d.createObjectStore(STORE, { keyPath: "id" });
+  s.createIndex("by_synced", "synced");
+  s.createIndex("by_local_date", "local_date");
+}
+
+function warnDegraded() {
+  if (typeof document === "undefined" || document.getElementById("db-degraded-warning")) return;
+  const el = document.createElement("div");
+  el.id = "db-degraded-warning";
+  el.textContent =
+    "Atualização com problema — vendas preservadas, módulos novos indisponíveis. / Aktualisierung fehlgeschlagen — Verkäufe bleiben erhalten, neue Module nicht verfügbar.";
+  el.style.cssText =
+    "position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;" +
+    "color:#fff;font-size:12px;line-height:1.4;padding:6px 10px;text-align:center;";
+  document.body.appendChild(el);
+}
+
 function db() {
   if (!dbp) {
-    dbp = openDB(DB_NAME, 1, {
-      upgrade(d) {
-        const s = d.createObjectStore(STORE, { keyPath: "id" });
-        s.createIndex("by_synced", "synced");
-        s.createIndex("by_local_date", "local_date");
+    dbp = openDB(DB_NAME, DB_VERSION, {
+      upgrade(d, oldVersion) {
+        if (oldVersion < 1) createSalesStore(d);
+        if (oldVersion < 2) {
+          d.createObjectStore("outbox", { keyPath: "id" });
+          d.createObjectStore("cache", { keyPath: "key" });
+          d.createObjectStore("log", { keyPath: "id" });
+        }
       },
+    }).catch((err) => {
+      // A transacao de upgrade do IndexedDB e atomica: se ela falhou, o
+      // banco no navegador ainda esta na versao anterior (0 ou 1), intacta.
+      // Cair para v1 aqui e seguro nos dois casos — celular novo (cria
+      // sales pela primeira vez) ou celular antigo (sales ja existe e nao
+      // e tocado).
+      console.error("Falha na migracao do IndexedDB, caindo para v1:", err);
+      dbDegraded = true;
+      warnDegraded();
+      return openDB(DB_NAME, 1, {
+        upgrade(d, oldVersion) {
+          if (oldVersion < 1) createSalesStore(d);
+        },
+      });
     });
   }
   return dbp;
