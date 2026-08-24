@@ -157,3 +157,52 @@ export async function deleteCache(key: string): Promise<void> {
   if (dbDegraded) return;
   await (await db()).delete("cache", key);
 }
+
+export interface LogRow {
+  id: string;
+  /** ISO, relogio do aparelho — um evento offline guarda a hora real. */
+  at: string;
+  kind: "error" | "recovery" | "info";
+  /** Frase ja pronta, PT fixo — a tela de Sistema nao faz nenhuma juncao. */
+  message: string;
+}
+
+/**
+ * Log local (Etapa 5) — store `log`, ja criado na Etapa 3. Nunca propaga
+ * erro: gravar/ler/podar o log nao pode virar uma segunda falha visivel por
+ * cima da falha original que estava sendo registrada.
+ */
+export async function appendLog(row: LogRow): Promise<void> {
+  if (dbDegraded) return;
+  try {
+    await (await db()).add("log", row);
+  } catch {
+    // silencioso de proposito
+  }
+}
+
+export async function allLog(): Promise<LogRow[]> {
+  if (dbDegraded) return [];
+  try {
+    const rows: LogRow[] = await (await db()).getAll("log");
+    return rows.sort((a, b) => b.at.localeCompare(a.at));
+  } catch {
+    return [];
+  }
+}
+
+export async function pruneLog(olderThanDays: number): Promise<void> {
+  if (dbDegraded) return;
+  try {
+    const cutoff = Date.now() - olderThanDays * 86_400_000;
+    const d = await db();
+    const rows: LogRow[] = await d.getAll("log");
+    const tx = d.transaction("log", "readwrite");
+    for (const r of rows) {
+      if (new Date(r.at).getTime() < cutoff) await tx.store.delete(r.id);
+    }
+    await tx.done;
+  } catch {
+    // silencioso de proposito
+  }
+}

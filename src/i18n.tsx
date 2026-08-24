@@ -110,6 +110,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.resetDone": "{n} vendas apagadas.",
     "settings.resetDone_one": "1 venda apagada.",
     "settings.resetNone": "Nenhuma venda hoje.",
+    "settings.system": "Sistema",
 
     "nav.menu": "🍓 Cardápio",
 
@@ -147,6 +148,42 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "auth.expiredNotice": "Sessão expirada. Entre novamente.",
     "auth.error": "Erro: {msg}",
     "auth.loadError": "Não deu para abrir agora. Tente de novo com internet.",
+
+    "system.title": "Sistema",
+    "system.loadError": "Não deu para abrir agora. Tente de novo com internet.",
+    "system.tab.errors": "Erros",
+    "system.tab.log": "Log",
+    "system.tab.device": "Aparelho",
+    "system.log.heading": "Quem fez o quê",
+    "system.empty": "Nada registrado ainda.",
+
+    "system.errors.pending": "{n} vendas presas na fila",
+    "system.errors.pending_one": "1 venda presa na fila",
+    "system.errors.pendingEmpty": "Nenhuma venda presa.",
+    "system.errors.lastFailure": "Última falha de sincronização",
+    "system.errors.noFailure": "Nenhuma falha registrada.",
+    "system.errors.history": "Histórico",
+
+    "system.log.onlyThisDevice": "Só deste aparelho.",
+    "system.log.loading": "Carregando…",
+
+    "system.device.connection": "Conexão",
+    "system.device.online": "Online",
+    "system.device.offline": "Offline",
+    "system.device.version": "Versão",
+    "system.device.session": "Sessão",
+    "system.device.session.deslogado": "Deslogado",
+    "system.device.session.ativo": "Ativo",
+    "system.device.session.sessao-offline": "Sessão offline",
+    "system.device.session.expirado": "Expirada",
+    "system.device.storage": "Armazenamento",
+    "system.device.storagePersisted": "permanente",
+    "system.device.storageNotPersisted": "não permanente",
+    "system.device.storageUnknown": "não disponível",
+    "system.device.id": "ID do aparelho",
+    "system.device.salesCount": "Vendas guardadas",
+    "system.device.logCount": "Linhas de log",
+    "system.device.updateInfo": "O app se atualiza sozinho ao reabrir.",
   },
 
   de: {
@@ -248,6 +285,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.resetDone": "{n} Verkäufe gelöscht.",
     "settings.resetDone_one": "1 Verkauf gelöscht.",
     "settings.resetNone": "Heute keine Verkäufe.",
+    "settings.system": "System",
 
     "nav.menu": "🍓 Karte",
 
@@ -285,6 +323,42 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "auth.expiredNotice": "Sitzung abgelaufen. Bitte erneut anmelden.",
     "auth.error": "Fehler: {msg}",
     "auth.loadError": "Konnte jetzt nicht geöffnet werden. Mit Internet erneut versuchen.",
+
+    "system.title": "System",
+    "system.loadError": "Konnte jetzt nicht geöffnet werden. Mit Internet erneut versuchen.",
+    "system.tab.errors": "Fehler",
+    "system.tab.log": "Log",
+    "system.tab.device": "Gerät",
+    "system.log.heading": "Wer hat was gemacht",
+    "system.empty": "Noch nichts protokolliert.",
+
+    "system.errors.pending": "{n} Verkäufe hängen in der Warteschlange fest",
+    "system.errors.pending_one": "1 Verkauf hängt in der Warteschlange fest",
+    "system.errors.pendingEmpty": "Kein Verkauf hängt fest.",
+    "system.errors.lastFailure": "Letzter Synchronisierungsfehler",
+    "system.errors.noFailure": "Kein Fehler protokolliert.",
+    "system.errors.history": "Verlauf",
+
+    "system.log.onlyThisDevice": "Nur dieses Gerät.",
+    "system.log.loading": "Lade…",
+
+    "system.device.connection": "Verbindung",
+    "system.device.online": "Online",
+    "system.device.offline": "Offline",
+    "system.device.version": "Version",
+    "system.device.session": "Sitzung",
+    "system.device.session.deslogado": "Abgemeldet",
+    "system.device.session.ativo": "Aktiv",
+    "system.device.session.sessao-offline": "Sitzung offline",
+    "system.device.session.expirado": "Abgelaufen",
+    "system.device.storage": "Speicher",
+    "system.device.storagePersisted": "dauerhaft",
+    "system.device.storageNotPersisted": "nicht dauerhaft",
+    "system.device.storageUnknown": "nicht verfügbar",
+    "system.device.id": "Geräte-ID",
+    "system.device.salesCount": "Gespeicherte Verkäufe",
+    "system.device.logCount": "Log-Einträge",
+    "system.device.updateInfo": "Die App aktualisiert sich beim erneuten Öffnen selbst.",
   },
 };
 

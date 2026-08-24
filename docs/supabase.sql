@@ -452,6 +452,50 @@ create table if not exists public.activity_log (
 alter table public.activity_log enable row level security;
 
 
+-- ============================================================================
+-- Etapa 5 do plano de execucao — Tela de Sistema e o log
+-- Ver 02-Projetos/sunbite-ops/plano-execucao.md
+-- ============================================================================
+
+-- Leitura do log do servidor, so para quem esta logado (mesma regra de sales).
+drop policy if exists activity_log_read_auth on public.activity_log;
+create policy activity_log_read_auth
+  on public.activity_log for select to authenticated using (true);
+
+-- Nenhuma policy de insert para anon/authenticated, de proposito: a chave
+-- anon viaja no JavaScript do app, e se ela pudesse escrever aqui qualquer
+-- um forjaria uma entrada de log. So o gatilho abaixo, com privilegio
+-- elevado (security definer), consegue escrever nesta tabela.
+create index if not exists activity_log_occurred_at_idx
+  on public.activity_log (occurred_at desc);
+
+create or replace function public.log_sale_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.activity_log (occurred_at, profile_id, device_id, action, message)
+  values (
+    new.created_at,   -- hora do aparelho, nao do servidor
+    null,              -- venda gravada por anon, sem sessao: nao ha "quem"
+    new.device_id,
+    'sale_insert',
+    'Venda de ' || new.cup_count || ' copo(s), CHF ' ||
+      to_char(new.total, 'FM999990.00') || ', via ' ||
+      case new.payment when 'cash' then 'dinheiro' else 'TWINT' end || '.'
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists sales_log_insert on public.sales;
+create trigger sales_log_insert
+  after insert on public.sales
+  for each row execute function public.log_sale_insert();
+
+
 -- ── Tempo real ───────────────────────────────────────────────────────────
 
 -- Ligado so nestas tres. Nem sales — volume alto e sem necessidade entre

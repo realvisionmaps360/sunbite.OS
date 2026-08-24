@@ -1,5 +1,5 @@
 import { AnimatePresence } from "framer-motion";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { OrderSummary } from "./components/OrderSummary";
 import { PaymentSheet } from "./components/PaymentSheet";
 import { ReviewSheet } from "./components/ReviewSheet";
@@ -13,6 +13,7 @@ import { LoginScreen } from "./components/adminScreens";
 import { TOPPINGS } from "./config";
 import { deviceId, pendingSales, saveSale } from "./db";
 import { LangToggle, useLang } from "./i18n";
+import { logEvent } from "./log";
 import { useOrder } from "./order";
 import { loadConfig, syncNow } from "./sync";
 import { useSwipe } from "./useSwipe";
@@ -20,7 +21,19 @@ import type { Payment, Sale } from "./types";
 
 // Este arquivo nunca importa ./auth nem ./supabase, em lugar nenhum — e essa
 // ausencia, nao um `if`, que garante que a venda nao depende de login.
-type Screen = "sale" | "payment" | "review" | "sales" | "menu" | "settings" | "login";
+// SystemScreen tambem nao exige sessao (funciona offline/deslogada), entao
+// nao entra no barril adminScreens.ts — tem seu proprio lazy() aqui.
+const SystemScreen = lazy(() => import("./components/SystemScreen"));
+
+type Screen =
+  | "sale"
+  | "payment"
+  | "review"
+  | "sales"
+  | "menu"
+  | "settings"
+  | "login"
+  | "system";
 
 function stamp() {
   const d = new Date();
@@ -41,6 +54,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const errorTimer = useRef<number | undefined>(undefined);
+  // Marca se a ultima tentativa de sync falhou, so para saber quando logar
+  // a RECUPERACAO (Etapa 5) — nao muda syncNow() nem o que ele retorna.
+  const syncFalhouAntes = useRef(false);
 
   const refreshPending = useCallback(async () => {
     setPending((await pendingSales()).length);
@@ -55,7 +71,21 @@ export default function App() {
   useEffect(() => {
     const attempt = async () => {
       const r = await syncNow();
-      if (r.ok && r.sent > 0) void refreshPending();
+      if (r.ok) {
+        if (r.sent > 0) void refreshPending();
+        if (syncFalhouAntes.current) {
+          syncFalhouAntes.current = false;
+          void logEvent("recovery", "Sincronização voltou a funcionar.");
+        }
+        return;
+      }
+      // "no-config" e "offline" sao estados normais (app roda o dia inteiro
+      // sem rede) — so reason "error" e falha de verdade, e so essa carrega
+      // a mensagem exata que a aba Erros precisa mostrar.
+      if (r.reason === "error") {
+        syncFalhouAntes.current = true;
+        void logEvent("error", `Falha ao sincronizar: ${r.message ?? ""}`);
+      }
     };
     void attempt();
     const id = window.setInterval(attempt, 120_000);
@@ -107,6 +137,7 @@ export default function App() {
       await saveSale(sale);
     } catch (e) {
       showError(t("error.save", { msg: (e as Error).message }));
+      void logEvent("error", `Falha ao gravar venda: ${(e as Error).message}`);
       return;
     }
 
@@ -261,7 +292,11 @@ export default function App() {
       </AnimatePresence>
 
       {screen === "settings" && (
-        <SettingsScreen onClose={fechar} onDataChanged={refreshPending} />
+        <SettingsScreen
+          onClose={fechar}
+          onDataChanged={refreshPending}
+          onOpenSystem={() => setScreen("system")}
+        />
       )}
 
       {screen === "login" && (
@@ -281,6 +316,27 @@ export default function App() {
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
             <LoginScreen onClose={fechar} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {screen === "system" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={fechar} className="px-3 py-1 text-3xl leading-none">
+                  ×
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("system.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <SystemScreen onClose={fechar} />
           </Suspense>
         </ErrorBoundary>
       )}

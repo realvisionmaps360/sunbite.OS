@@ -7,9 +7,11 @@ import { loadConfig, saveConfig, syncNow } from "../sync";
 export function SettingsScreen({
   onClose,
   onDataChanged,
+  onOpenSystem,
 }: {
   onClose: () => void;
   onDataChanged: () => void;
+  onOpenSystem: () => void;
 }) {
   const { t } = useLang();
   const cfg = loadConfig();
@@ -124,6 +126,15 @@ export function SettingsScreen({
               {t("settings.sync")}
             </button>
           </div>
+        </section>
+
+        <section>
+          <button
+            onClick={onOpenSystem}
+            className="w-full rounded-lg border border-black/20 py-3 font-semibold"
+          >
+            {t("settings.system")}
+          </button>
         </section>
 
         {/* Fica por último de propósito: ninguém encosta aqui sem querer. */}

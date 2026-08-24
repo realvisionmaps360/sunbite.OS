@@ -1,9 +1,26 @@
+import { execSync } from "node:child_process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+function shortSha(): string | undefined {
+  try {
+    return execSync("git rev-parse --short HEAD").toString().trim();
+  } catch {
+    return undefined;
+  }
+}
+
+// Publicado via `vercel --prod`, nao Actions: VERCEL_GIT_COMMIT_SHA so
+// existe no build da Vercel. git rev-parse cobre o build local.
+const APP_VERSION =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? shortSha() ?? "dev";
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [
     react(),
     tailwindcss(),
