@@ -20,14 +20,55 @@ create index if not exists sales_local_date_idx on public.sales (local_date);
 
 alter table public.sales enable row level security;
 
--- O app usa a chave anon. Ele so precisa gravar — nunca ler de volta.
-create policy "pdv grava venda"
-  on public.sales for insert to anon with check (true);
+-- Etapa 2 do plano de execucao (02-Projetos/sunbite-ops/plano-execucao.md).
+-- Ate aqui a politica de UPDATE era `using (true) with check (true)`: quem
+-- lesse o JavaScript do app conseguia zerar o faturamento da temporada
+-- inteira com uma requisicao. As tres policies abaixo substituem
+-- "pdv grava venda" e "pdv reenvia venda", que faziam isso.
+--
+-- Verificacao obrigatoria ANTES de aplicar: rodar o predicado do check de
+-- insercao contra as linhas existentes. Zero linhas fora do limite, ou
+-- ajustar os limites abaixo antes de seguir.
+-- select * from public.sales where not (
+--   cup_count between 1 and 50
+--   and total >= 0 and total <= 500
+--   and payment in ('cash','twint')
+--   and created_at > timestamptz '2026-01-01'
+--   and created_at < now() + interval '1 day'
+--   and local_date between current_date - 30 and current_date + 1
+-- );
 
--- Necessario tambem para o cancelamento chegar ate aqui: cancelar marca a venda
--- como nao sincronizada e o upsert por id atualiza a linha que ja existia.
-create policy "pdv reenvia venda"
-  on public.sales for update to anon using (true) with check (true);
+-- Leitura passa a existir, so para quem esta logado.
+drop policy if exists sales_read_auth on public.sales;
+create policy sales_read_auth
+  on public.sales for select to authenticated using (true);
+
+-- Escrita continua aberta sem login (vender nunca bloqueia), mas com limites.
+drop policy if exists "pdv grava venda" on public.sales;
+drop policy if exists sales_insert on public.sales;
+create policy sales_insert
+  on public.sales for insert to anon, authenticated
+  with check (
+    cup_count between 1 and 50
+    and total >= 0 and total <= 500
+    and payment in ('cash','twint')
+    and created_at > timestamptz '2026-01-01'
+    and created_at < now() + interval '1 day'
+    and local_date between current_date - 30 and current_date + 1
+  );
+
+-- Cancelamento passa a permitir exatamente uma transicao, em duas colunas —
+-- nao mais "atualiza qualquer coluna para qualquer valor".
+drop policy if exists "pdv reenvia venda" on public.sales;
+drop policy if exists sales_cancel_anon on public.sales;
+create policy sales_cancel_anon
+  on public.sales for update to anon
+  using (cancelled = false) with check (cancelled = true);
+
+revoke update on public.sales from anon;
+grant  update (cancelled, cancelled_at) on public.sales to anon;
+
+-- Apagar: ninguem. deleteToday() no app continua sendo so local.
 
 -- Conferencia do dia (venda cancelada nao entra em nenhum total):
 -- select local_date,
