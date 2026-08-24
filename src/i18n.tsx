@@ -134,6 +134,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
 
     "confirm.next": "toque para o próximo cliente",
     "error.save": "ERRO ao salvar: {msg}",
+
+    "nav.login": "Entrar",
+    "auth.title": "Entrar",
+    "auth.email": "E-mail",
+    "auth.password": "Senha",
+    "auth.enter": "Entrar",
+    "auth.entering": "Entrando…",
+    "auth.loggedInAs": "Conectado como {email}",
+    "auth.signOut": "Sair",
+    "auth.offlineBadge": "sessão offline",
+    "auth.expiredNotice": "Sessão expirada. Entre novamente.",
+    "auth.error": "Erro: {msg}",
+    "auth.loadError": "Não deu para abrir agora. Tente de novo com internet.",
   },
 
   de: {
@@ -259,6 +272,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
 
     "confirm.next": "tippen für den nächsten Kunden",
     "error.save": "FEHLER beim Speichern: {msg}",
+
+    "nav.login": "Anmelden",
+    "auth.title": "Anmelden",
+    "auth.email": "E-Mail",
+    "auth.password": "Passwort",
+    "auth.enter": "Anmelden",
+    "auth.entering": "Anmelden…",
+    "auth.loggedInAs": "Angemeldet als {email}",
+    "auth.signOut": "Abmelden",
+    "auth.offlineBadge": "Sitzung offline",
+    "auth.expiredNotice": "Sitzung abgelaufen. Bitte erneut anmelden.",
+    "auth.error": "Fehler: {msg}",
+    "auth.loadError": "Konnte jetzt nicht geöffnet werden. Mit Internet erneut versuchen.",
   },
 };
 

@@ -1,5 +1,5 @@
 import { AnimatePresence } from "framer-motion";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { OrderSummary } from "./components/OrderSummary";
 import { PaymentSheet } from "./components/PaymentSheet";
 import { ReviewSheet } from "./components/ReviewSheet";
@@ -8,6 +8,8 @@ import { MenuScreen } from "./components/MenuScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SaleConfirmation, type Confirmation } from "./components/SaleConfirmation";
 import { Valor } from "./components/Valor";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { LoginScreen } from "./components/adminScreens";
 import { TOPPINGS } from "./config";
 import { deviceId, pendingSales, saveSale } from "./db";
 import { LangToggle, useLang } from "./i18n";
@@ -16,7 +18,9 @@ import { loadConfig, syncNow } from "./sync";
 import { useSwipe } from "./useSwipe";
 import type { Payment, Sale } from "./types";
 
-type Screen = "sale" | "payment" | "review" | "sales" | "menu" | "settings";
+// Este arquivo nunca importa ./auth nem ./supabase, em lugar nenhum — e essa
+// ausencia, nao um `if`, que garante que a venda nao depende de login.
+type Screen = "sale" | "payment" | "review" | "sales" | "menu" | "settings" | "login";
 
 function stamp() {
   const d = new Date();
@@ -149,6 +153,16 @@ export default function App() {
                 : t("status.synced")}
           </span>
           <LangToggle />
+          {/* Botao neutro de proposito: nunca mostra logado/deslogado. Fazer
+              isso exigiria ler auth.ts, e a tela de venda nao le estado de
+              login em lugar nenhum. */}
+          <button
+            onClick={() => setScreen("login")}
+            aria-label={t("nav.login")}
+            className="px-2 py-1 text-sm"
+          >
+            👤
+          </button>
           <button onClick={() => setScreen("settings")} className="px-2 py-1 text-sm">
             ⚙︎
           </button>
@@ -248,6 +262,27 @@ export default function App() {
 
       {screen === "settings" && (
         <SettingsScreen onClose={fechar} onDataChanged={refreshPending} />
+      )}
+
+      {screen === "login" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={fechar} className="px-3 py-1 text-3xl leading-none">
+                  ×
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("auth.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <LoginScreen onClose={fechar} />
+          </Suspense>
+        </ErrorBoundary>
       )}
 
       <SaleConfirmation

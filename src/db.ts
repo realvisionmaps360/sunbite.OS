@@ -135,3 +135,25 @@ export async function deleteToday(): Promise<number> {
   await tx.done;
   return alvo.length;
 }
+
+/**
+ * Espelho local das tabelas que precisam funcionar sem internet — hoje, a
+ * identidade da sessao (Etapa 4). O store `cache` ja existe desde a Etapa 3.
+ * Se `dbDegraded` (migracao para v2 falhou), essas funcoes silenciosamente
+ * nao fazem nada: o mirror e redundancia, nunca fonte obrigatoria.
+ */
+export async function getCache<T>(key: string): Promise<T | undefined> {
+  if (dbDegraded) return undefined;
+  const row = (await (await db()).get("cache", key)) as { key: string; value: T } | undefined;
+  return row?.value;
+}
+
+export async function setCache(key: string, value: unknown): Promise<void> {
+  if (dbDegraded) return;
+  await (await db()).put("cache", { key, value });
+}
+
+export async function deleteCache(key: string): Promise<void> {
+  if (dbDegraded) return;
+  await (await db()).delete("cache", key);
+}
