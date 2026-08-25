@@ -666,3 +666,221 @@ insert into public.checklist_templates (phase, label_pt, label_de, critical, sor
   ('encerramento', 'Carregar equipamentos', 'Geräte einladen', false, 100),
   ('encerramento', 'Verificar se nada ficou no local', 'Prüfen, dass nichts am Ort zurückbleibt', false, 110)
 on conflict (phase, label_pt) do nothing;
+
+
+-- ============================================================================
+-- Etapa 7 do plano de execucao — Equipamentos, Estoque, Compras, Financeiro
+-- Ver 02-Projetos/sunbite-ops/plano-execucao.md
+--
+-- Todas as tabelas abaixo ja existiam desde a Etapa 1, com RLS ligado e sem
+-- nenhuma policy, de proposito — deixadas fechadas ate esta etapa abrir.
+--
+-- Mesmo padrao de operations/checklist_state: leitura e escrita completas
+-- so para authenticated (Felipe e Romana, poder identico). Sem "for all":
+-- apagar continua sendo ninguem. equipment/suppliers/purchases/expenses nao
+-- ganham policy nenhuma para anon — sao modulos "sentado com wifi", ao
+-- contrario de stock_movements, que a fila offline grava autenticado assim
+-- que a sessao volta (nunca como anon).
+-- ============================================================================
+
+-- equipment
+drop policy if exists equipment_select_auth on public.equipment;
+create policy equipment_select_auth
+  on public.equipment for select to authenticated using (true);
+drop policy if exists equipment_insert_auth on public.equipment;
+create policy equipment_insert_auth
+  on public.equipment for insert to authenticated with check (true);
+drop policy if exists equipment_update_auth on public.equipment;
+create policy equipment_update_auth
+  on public.equipment for update to authenticated using (true) with check (true);
+
+-- suppliers
+drop policy if exists suppliers_select_auth on public.suppliers;
+create policy suppliers_select_auth
+  on public.suppliers for select to authenticated using (true);
+drop policy if exists suppliers_insert_auth on public.suppliers;
+create policy suppliers_insert_auth
+  on public.suppliers for insert to authenticated with check (true);
+drop policy if exists suppliers_update_auth on public.suppliers;
+create policy suppliers_update_auth
+  on public.suppliers for update to authenticated using (true) with check (true);
+
+-- stock_items — quantity so muda por gatilho (apply_stock_movement, Etapa 1),
+-- mas a policy nao restringe a coluna: os dois usuarios sao igualmente
+-- confiaveis, a disciplina de nunca mandar quantity direto fica no app.
+drop policy if exists stock_items_select_auth on public.stock_items;
+create policy stock_items_select_auth
+  on public.stock_items for select to authenticated using (true);
+drop policy if exists stock_items_insert_auth on public.stock_items;
+create policy stock_items_insert_auth
+  on public.stock_items for insert to authenticated with check (true);
+drop policy if exists stock_items_update_auth on public.stock_items;
+create policy stock_items_update_auth
+  on public.stock_items for update to authenticated using (true) with check (true);
+
+-- stock_movements — a unica tabela desta etapa tocada em pe na barraca;
+-- e por isso a unica com fila offline no app (outbox.ts).
+drop policy if exists stock_movements_select_auth on public.stock_movements;
+create policy stock_movements_select_auth
+  on public.stock_movements for select to authenticated using (true);
+drop policy if exists stock_movements_insert_auth on public.stock_movements;
+create policy stock_movements_insert_auth
+  on public.stock_movements for insert to authenticated with check (true);
+
+-- purchases / purchase_items
+drop policy if exists purchases_select_auth on public.purchases;
+create policy purchases_select_auth
+  on public.purchases for select to authenticated using (true);
+drop policy if exists purchases_insert_auth on public.purchases;
+create policy purchases_insert_auth
+  on public.purchases for insert to authenticated with check (true);
+drop policy if exists purchases_update_auth on public.purchases;
+create policy purchases_update_auth
+  on public.purchases for update to authenticated using (true) with check (true);
+
+drop policy if exists purchase_items_select_auth on public.purchase_items;
+create policy purchase_items_select_auth
+  on public.purchase_items for select to authenticated using (true);
+drop policy if exists purchase_items_insert_auth on public.purchase_items;
+create policy purchase_items_insert_auth
+  on public.purchase_items for insert to authenticated with check (true);
+drop policy if exists purchase_items_update_auth on public.purchase_items;
+create policy purchase_items_update_auth
+  on public.purchase_items for update to authenticated using (true) with check (true);
+
+-- expenses
+drop policy if exists expenses_select_auth on public.expenses;
+create policy expenses_select_auth
+  on public.expenses for select to authenticated using (true);
+drop policy if exists expenses_insert_auth on public.expenses;
+create policy expenses_insert_auth
+  on public.expenses for insert to authenticated with check (true);
+drop policy if exists expenses_update_auth on public.expenses;
+create policy expenses_update_auth
+  on public.expenses for update to authenticated using (true) with check (true);
+
+-- prices / price_history — price_history so e escrito pelo gatilho abaixo,
+-- nunca direto pelo app (mesmo principio do activity_log na Etapa 5).
+drop policy if exists prices_select_auth on public.prices;
+create policy prices_select_auth
+  on public.prices for select to authenticated using (true);
+drop policy if exists prices_insert_auth on public.prices;
+create policy prices_insert_auth
+  on public.prices for insert to authenticated with check (true);
+drop policy if exists prices_update_auth on public.prices;
+create policy prices_update_auth
+  on public.prices for update to authenticated using (true) with check (true);
+
+drop policy if exists price_history_select_auth on public.price_history;
+create policy price_history_select_auth
+  on public.price_history for select to authenticated using (true);
+
+
+-- ── Historico de preco automatico ───────────────────────────────────────
+-- Grava o antes-e-depois sozinho, sem depender do app lembrar de inserir as
+-- duas linhas — mesmo principio do gatilho de activity_log.
+create or replace function public.record_price_history()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  if new.value is distinct from old.value then
+    insert into public.price_history (item_key, old_value, new_value, changed_by, changed_at)
+    values (new.item_key, old.value, new.value, new.updated_by, now());
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists price_history_trigger on public.prices;
+create trigger price_history_trigger
+  after update on public.prices
+  for each row execute function public.record_price_history();
+
+
+-- ── Seed — equipamento, fornecedores, estoque, precos, pendencias ───────
+-- Direto dos 16 documentos-base e da tabela da Etapa 7 do plano. Tudo
+-- editavel pelo app depois — isto e so o ponto de partida.
+
+create unique index if not exists equipment_name_idx on public.equipment (name);
+insert into public.equipment (name, status, critical, notes) values
+  ('Freio da foodbike', 'issue', true, 'Freio fraco — problema de seguranca ativo.'),
+  ('Bateria do motor', 'issue', true, 'Descarrega apesar de indicar 100%.'),
+  ('Colher de chocolate (principal)', 'broken', false, 'Quebrou durante a operacao.'),
+  ('Colher de chocolate (reserva)', 'missing', false, 'Segunda colher — comprar.'),
+  ('Material/QR Code TWINT', 'ok', false, null)
+on conflict (name) do nothing;
+
+create unique index if not exists suppliers_name_idx on public.suppliers (name);
+insert into public.suppliers (name, product, contact, notes) values
+  ('A confirmar — chocolate', 'Chocolate', null, 'Fornecedor e preco normal fora de promocao a confirmar.'),
+  ('A confirmar — morango', 'Morango', null, 'Fornecedor a confirmar.'),
+  ('A confirmar — copo', 'Copo 300ml rPET', null, 'Fornecedor a confirmar.')
+on conflict (name) do nothing;
+
+create unique index if not exists stock_items_name_idx on public.stock_items (name);
+insert into public.stock_items (name, unit, quantity, low_stock_threshold, supplier_id, notes)
+select 'Chocolate (pacote 2,5kg)', 'pacote', 0, 1, s.id, 'CHF 20/pacote, valor de partida — a confirmar.'
+from public.suppliers s where s.name = 'A confirmar — chocolate'
+union all
+select 'Copo 300ml rPET', 'unidade', 0, 100, s.id, 'CHF 0.2367/un (300 por CHF 71, frete incluido).'
+from public.suppliers s where s.name = 'A confirmar — copo'
+union all
+select 'Morango', 'kg', 0, 2, s.id, '≈CHF 9.17/kg (6kg por CHF 55 em 30.07.2026).'
+from public.suppliers s where s.name = 'A confirmar — morango'
+on conflict (name) do nothing;
+
+insert into public.prices (item_key, value) values
+  ('cup', 7.50),
+  ('topping', 0.50)
+on conflict (item_key) do nothing;
+
+create unique index if not exists pendencies_seed_idx
+  on public.pendencies (description) where origin = 'seed';
+insert into public.pendencies (description, critical, status, origin) values
+  ('Freio da foodbike com problema de seguranca', true, 'aberta', 'seed'),
+  ('Bateria do motor descarregando apesar de indicar 100%', true, 'aberta', 'seed'),
+  ('Comprar nova colher de chocolate', false, 'aberta', 'seed'),
+  ('Providenciar material/QR Code TWINT', false, 'aberta', 'seed'),
+  ('Identificar fornecedor do chocolate', false, 'aberta', 'seed'),
+  ('Identificar fornecedor dos morangos', false, 'aberta', 'seed'),
+  ('Identificar fornecedor dos copos', false, 'aberta', 'seed')
+on conflict (description) where origin = 'seed' do nothing;
+
+
+-- ── Seed — historico financeiro confirmado ───────────────────────────────
+-- 18.07 e 15.08.2026, conforme documento 07. Receita de dinheiro/TWINT
+-- dessas datas NAO entra aqui — ja existe como venda real em `sales`;
+-- redigitar duplicaria. So o que sales nao guarda: aporte, compra e o
+-- caixa contado no fim (que nao bate e fica marcado como tal).
+do $$
+begin
+  if not exists (select 1 from public.expenses where occurred_at = '2026-07-18' and type = 'movimento_caixa') then
+    insert into public.expenses (type, category, description, value, occurred_at)
+    values ('movimento_caixa', 'operacional', 'Caixa inicial (aporte, nao receita)', 370.00, '2026-07-18');
+  end if;
+
+  if not exists (select 1 from public.expenses where occurred_at = '2026-08-15' and type = 'movimento_caixa') then
+    insert into public.expenses (type, category, description, value, occurred_at)
+    values ('movimento_caixa', 'operacional',
+      'Caixa contado — a reconciliar: diferenca de CHF 172.40 nao confirmada (aporte/retirada/despesa em dinheiro desconhecidos)',
+      789.10, '2026-08-15');
+  end if;
+
+  if not exists (select 1 from public.purchases where notes = 'seed:morangos-30.07') then
+    with p as (
+      insert into public.purchases (supplier_id, purchased_at, total, notes)
+      select s.id, '2026-07-30', 55.00, 'seed:morangos-30.07'
+      from public.suppliers s where s.name = 'A confirmar — morango'
+      returning id
+    ), item as (
+      insert into public.purchase_items (purchase_id, stock_item_id, description, quantity, unit_cost)
+      select p.id, si.id, 'Morangos', 6, 9.1667
+      from p, public.stock_items si where si.name = 'Morango'
+      returning purchase_id, stock_item_id, quantity
+    )
+    insert into public.stock_movements (stock_item_id, quantity_delta, reason, notes)
+    select item.stock_item_id, item.quantity, 'compra', 'seed:morangos-30.07' from item;
+  end if;
+end $$;

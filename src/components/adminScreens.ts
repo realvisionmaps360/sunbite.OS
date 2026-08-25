@@ -11,3 +11,6 @@ import { lazy } from "react";
  */
 export const LoginScreen = lazy(() => import("./LoginScreen"));
 export const OperationScreen = lazy(() => import("./OperationScreen"));
+export const EquipmentScreen = lazy(() => import("./EquipmentScreen"));
+export const SuppliersScreen = lazy(() => import("./SuppliersScreen"));
+export const StockScreen = lazy(() => import("./StockScreen"));

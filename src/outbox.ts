@@ -2,7 +2,11 @@ import { allOutbox, enqueueOutbox, removeOutbox, type OutboxRow } from "./db";
 import { getSupabase } from "./supabase";
 import { logEvent } from "./log";
 
-export type OutboxTable = "operations" | "checklist_state" | "pendencies";
+export type OutboxTable =
+  | "operations"
+  | "checklist_state"
+  | "pendencies"
+  | "stock_movements";
 
 /**
  * Fila offline para as tabelas administrativas (Etapa 6). Diferente de
