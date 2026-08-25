@@ -892,3 +892,147 @@ begin
     select item.stock_item_id, item.quantity, 'compra', 'seed:morangos-30.07' from item;
   end if;
 end $$;
+
+
+-- ============================================================================
+-- Etapa 8 do plano de execucao — Planejamento, calendario e site
+-- Ver 02-Projetos/sunbite-ops/plano-execucao.md
+--
+-- places/events sao modulo administrativo: leitura e escrita completas so
+-- para authenticated, mesmo padrao das etapas 6 e 7. Sem "for all": apagar
+-- continua sendo ninguem — local usado antes nunca some, so arquiva.
+--
+-- O site (sunbite.ch) precisa ler as proximas aparicoes SEM sessao e SEM
+-- enxergar fee/contact/notes de places nem os campos internos de events.
+-- Por isso `public_events`: tabela separada, so as colunas publicas,
+-- mantida por gatilho a partir de events — nao uma view sobre events, para
+-- que o vazamento seja estruturalmente impossivel, nao so evitado por uma
+-- policy bem escrita.
+-- ============================================================================
+
+-- Duas colunas que o schema ainda nao tinha e que este modulo precisa:
+-- cidade (o site mostra local + cidade separados) e tipo do evento (o site
+-- ja tem essa categoria em src/data/events.ts).
+alter table public.places
+  add column if not exists city text;
+
+alter table public.events
+  add column if not exists event_type text
+  check (event_type in ('market', 'festival', 'popup', 'private'));
+
+-- places
+drop policy if exists places_select_auth on public.places;
+create policy places_select_auth
+  on public.places for select to authenticated using (true);
+drop policy if exists places_insert_auth on public.places;
+create policy places_insert_auth
+  on public.places for insert to authenticated with check (true);
+drop policy if exists places_update_auth on public.places;
+create policy places_update_auth
+  on public.places for update to authenticated using (true) with check (true);
+
+-- events
+drop policy if exists events_select_auth on public.events;
+create policy events_select_auth
+  on public.events for select to authenticated using (true);
+drop policy if exists events_insert_auth on public.events;
+create policy events_insert_auth
+  on public.events for insert to authenticated with check (true);
+drop policy if exists events_update_auth on public.events;
+create policy events_update_auth
+  on public.events for update to authenticated using (true) with check (true);
+
+
+-- ── public_events — o que o site enxerga ────────────────────────────────
+-- So as colunas que o site precisa. Sem place_id, sem fee/contact/notes:
+-- o erro de vazar dado interno se torna impossivel, nao so evitado.
+create table if not exists public.public_events (
+  event_id   uuid primary key references public.events(id) on delete cascade,
+  starts_at  timestamptz not null,
+  label_en   text,
+  label_de   text,
+  city       text,
+  event_type text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.public_events enable row level security;
+
+-- Mantem public_events sincronizada sozinha: uma linha existe aqui se, e so
+-- se, o evento correspondente esta com is_public = true. Confirmado e
+-- publico sao a mesma coisa aqui de proposito — o schema atual nao tem um
+-- campo separado de "confirmado", e is_public ja e o unico sinalizador que
+-- Felipe usa para dizer "isto pode aparecer para o publico".
+create or replace function public.sync_public_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_id uuid := coalesce(new.id, old.id);
+  ev record;
+begin
+  if tg_op = 'DELETE' or not exists (
+    select 1 from public.events where id = target_id and is_public = true
+  ) then
+    delete from public.public_events where event_id = target_id;
+    return coalesce(new, old);
+  end if;
+
+  select e.id, e.starts_at, e.label_en, e.label_de, e.event_type, p.city
+    into ev
+    from public.events e
+    left join public.places p on p.id = e.place_id
+    where e.id = target_id;
+
+  insert into public.public_events (event_id, starts_at, label_en, label_de, city, event_type, updated_at)
+  values (ev.id, ev.starts_at, ev.label_en, ev.label_de, ev.city, ev.event_type, now())
+  on conflict (event_id) do update set
+    starts_at  = excluded.starts_at,
+    label_en   = excluded.label_en,
+    label_de   = excluded.label_de,
+    city       = excluded.city,
+    event_type = excluded.event_type,
+    updated_at = now();
+
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists events_sync_public on public.events;
+create trigger events_sync_public
+  after insert or update or delete on public.events
+  for each row execute function public.sync_public_event();
+
+-- Leitura publica, sem sessao: evento passado some sozinho, sem ninguem
+-- editar nada.
+drop policy if exists public_events_select_anon on public.public_events;
+create policy public_events_select_anon
+  on public.public_events for select to anon
+  using (starts_at > now() - interval '1 day');
+
+
+-- ── Seed — locais e eventos do documento 10 ─────────────────────────────
+create unique index if not exists places_name_idx on public.places (name);
+insert into public.places (name, city, fee, contact, rating, notes) values
+  ('Aarau/Aare', 'Aarau', null, null, 'testado', 'Testado em 18.07.2026.'),
+  ('Musik in der Altstadt', 'Aarau', null, null, null, 'Oportunidade.'),
+  ('Rooftop Aarau', 'Aarau', null, null, null, 'Convite.'),
+  ('Street Food Aarau', 'Aarau', null, null, null, 'Prospeccao.'),
+  ('A confirmar — venda 15.08', null, null, null, null, 'Local da venda de 15.08.2026 ainda nao confirmado.')
+on conflict (name) do nothing;
+
+-- events nao tem chave natural (id sempre gerado) — o indice abaixo e so
+-- para o seed nao duplicar ao rodar este arquivo de novo.
+create unique index if not exists events_place_starts_at_idx
+  on public.events (place_id, starts_at);
+
+insert into public.events (place_id, starts_at, label_en, label_de, is_public, event_type, notes)
+select p.id, timestamptz '2026-07-18 10:00:00+02', 'Aarau/Aare Market', 'Aarau/Aare Markt', true, 'market', 'Testado — venda real registrada.'
+from public.places p where p.name = 'Aarau/Aare'
+on conflict (place_id, starts_at) do nothing;
+
+insert into public.pendencies (description, critical, status, origin) values
+  ('Confirmar local da venda de 15.08.2026', false, 'aberta', 'seed')
+on conflict (description) where origin = 'seed' do nothing;

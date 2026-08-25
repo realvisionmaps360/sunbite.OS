@@ -14,7 +14,31 @@ import {
 } from "../operations";
 import { subscribeRealtime } from "../realtime";
 import { getSupabase } from "../supabase";
+import type { Place, SunbiteEvent } from "../types";
 import LoginScreen from "./LoginScreen";
+
+/** yyyymmddThhmmssZ, como o Google Calendar exige na URL de "adicionar evento". */
+function toGCalStamp(iso: string): string {
+  return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+/**
+ * URL padrao do Google Calendar (acao=TEMPLATE) — sem lib nova, sem OAuth,
+ * sem servidor guardando acesso. Duracao fixa de 3h porque o schema nao
+ * guarda hora de termino do evento.
+ */
+function googleCalendarUrl(ev: SunbiteEvent, lang: "pt" | "de", place: Place | null): string {
+  const title = (lang === "de" ? ev.label_de : ev.label_en) || place?.name || "Sunbite";
+  const start = new Date(ev.starts_at);
+  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `Sunbite — ${title}`,
+    dates: `${toGCalStamp(start.toISOString())}/${toGCalStamp(end.toISOString())}`,
+  });
+  if (place?.name) params.set("location", place.city ? `${place.name}, ${place.city}` : place.name);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
 
 const PHASES: Phase[] = ["preparacao", "saida", "operacao", "encerramento"];
 
@@ -57,6 +81,8 @@ function OperationBody({
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [states, setStates] = useState<ChecklistStateRow[]>([]);
   const [pendencies, setPendencies] = useState<Pendency[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [events, setEvents] = useState<SunbiteEvent[]>([]);
   const [tab, setTab] = useState<Phase>("preparacao");
   const [cashInitial, setCashInitial] = useState("");
   const [cashFinal, setCashFinal] = useState("");
@@ -100,6 +126,11 @@ function OperationBody({
         .eq("status", "aberta")
         .order("created_at", { ascending: false });
       if (pend) setPendencies(pend as Pendency[]);
+
+      const { data: pl } = await supabase.from("places").select("*").order("name");
+      if (pl) setPlaces(pl as Place[]);
+      const { data: ev } = await supabase.from("events").select("*").order("starts_at", { ascending: false });
+      if (ev) setEvents(ev as SunbiteEvent[]);
     } catch {
       // Offline ou sem sessao valida: fica com o que ja tem no estado local.
     } finally {
@@ -169,6 +200,13 @@ function OperationBody({
     };
     setStates((prev) => [...prev.filter((s) => s.template_id !== template.id), next]);
     await queueWrite("checklist_state", next, "operation_id,template_id");
+  }
+
+  async function linkPlaceEvent(patch: { place_id?: string | null; event_id?: string | null }) {
+    if (!operation) return;
+    const row = { id: operation.id, ...patch };
+    setOperation({ ...operation, ...patch });
+    await queueWrite("operations", row);
   }
 
   async function openOperation() {
@@ -305,6 +343,54 @@ function OperationBody({
                   );
                 })}
               </ul>
+            )}
+
+            {tab === "saida" && (
+              <div className="space-y-2 rounded-2xl bg-white p-4">
+                <label className="block text-sm font-semibold">{t("operation.place")}</label>
+                <select
+                  value={operation.place_id ?? ""}
+                  onChange={(e) => void linkPlaceEvent({ place_id: e.target.value || null })}
+                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                >
+                  <option value="">{t("places.noPlace")}</option>
+                  {places.map((pl) => (
+                    <option key={pl.id} value={pl.id}>
+                      {pl.name}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="block text-sm font-semibold">{t("operation.event")}</label>
+                <select
+                  value={operation.event_id ?? ""}
+                  onChange={(e) => void linkPlaceEvent({ event_id: e.target.value || null })}
+                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                >
+                  <option value="">{t("operation.noEvent")}</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {new Date(ev.starts_at).toLocaleDateString()} · {(lang === "de" ? ev.label_de : ev.label_en) || t("operation.event")}
+                    </option>
+                  ))}
+                </select>
+
+                {(() => {
+                  const linkedEvent = events.find((ev) => ev.id === operation.event_id);
+                  if (!linkedEvent) return null;
+                  const linkedPlace = places.find((pl) => pl.id === operation.place_id) ?? null;
+                  return (
+                    <a
+                      href={googleCalendarUrl(linkedEvent, lang, linkedPlace)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block w-full rounded-2xl border-2 border-brand py-3 text-center font-semibold text-brand"
+                    >
+                      {t("operation.addToCalendar")}
+                    </a>
+                  );
+                })()}
+              </div>
             )}
 
             {tab === "saida" && operation.status === "planned" && (

@@ -15,6 +15,7 @@ import {
   FinanceScreen,
   LoginScreen,
   OperationScreen,
+  PlacesScreen,
   PricesScreen,
   PurchasesScreen,
   StockScreen,
@@ -53,7 +54,8 @@ export type Screen =
   | "stock"
   | "purchases"
   | "finance"
-  | "prices";
+  | "prices"
+  | "places";
 
 function stamp() {
   const d = new Date();
@@ -162,6 +164,7 @@ export default function App() {
       case "purchases":
       case "finance":
       case "prices":
+      case "places":
         setScreen("home");
         return;
       case "sale":
@@ -564,6 +567,27 @@ export default function App() {
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
             <PricesScreen onClose={voltarHome} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {screen === "places" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
+                  ×
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("places.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <PlacesScreen onClose={voltarHome} />
           </Suspense>
         </ErrorBoundary>
       )}

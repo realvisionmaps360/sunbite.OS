@@ -140,3 +140,34 @@ export interface PriceHistoryRow {
   changed_by: string | null;
   changed_at: string;
 }
+
+// ── Etapa 8 — Planejamento, calendário e site ───────────────────────────────
+// Espelham as colunas de docs/supabase.sql, seção "Etapa 8".
+
+export interface Place {
+  id: string;
+  name: string;
+  city: string | null;
+  fee: number | null;
+  contact: string | null;
+  rating: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type EventType = "market" | "festival" | "popup" | "private";
+
+export interface SunbiteEvent {
+  id: string;
+  place_id: string | null;
+  starts_at: string;
+  label_en: string | null;
+  label_de: string | null;
+  /** Confirmado e público são a mesma coisa aqui — ver o gatilho sync_public_event no SQL. */
+  is_public: boolean;
+  event_type: EventType | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
