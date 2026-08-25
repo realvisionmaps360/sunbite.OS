@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ensureFreshSession, useAuth, type Identity } from "../auth";
-import { LangToggle, useLang } from "../i18n";
-import { getSupabase } from "../supabase";
 import { money } from "../config";
+import { useLang } from "../i18n";
+import { getSupabase } from "../supabase";
 import type { Purchase, StockItem, Supplier } from "../types";
 import LoginScreen from "./LoginScreen";
+import { AdminHeader, Card, EmptyState, TileButton } from "./ui";
 
 interface DraftItem {
   stock_item_id: string;
@@ -38,6 +39,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [creating, setCreating] = useState(false);
   const [supplierId, setSupplierId] = useState<string>("");
   const [items, setItems] = useState<DraftItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -117,6 +119,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
 
       setItems([]);
       setSupplierId("");
+      setCreating(false);
       await load();
     } catch {
       // Falha de rede a meio do salvamento: o usuario ve que nada mudou na
@@ -130,14 +133,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
-        <button onClick={onClose} className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold">
-          <span className="text-2xl leading-none">‹</span>
-          {t("nav.home")}
-        </button>
-        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("purchases.title")}</h1>
-        <LangToggle />
-      </header>
+      <AdminHeader title={t("purchases.title")} onClose={onClose} />
 
       {!online && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -148,98 +144,112 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
       {loading && <p className="p-6 text-center text-ink-muted">{t("operation.loading")}</p>}
 
       {!loading && (
-        <div className="flex-1 space-y-4 p-4">
-          <section className="space-y-2 rounded-2xl bg-white p-3">
-            <p className="text-sm font-semibold">{t("purchases.new")}</p>
-            <select
-              value={supplierId}
-              disabled={!online}
-              onChange={(e) => setSupplierId(e.target.value)}
-              className="w-full rounded-lg border border-black/20 bg-white px-3 py-2 disabled:opacity-40"
-            >
-              <option value="">{t("purchases.noSupplier")}</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+        <div className="flex-1 space-y-3 p-4">
+          {creating ? (
+            <Card>
+              <p className="font-display text-lg">{t("purchases.new")}</p>
+              <select
+                value={supplierId}
+                disabled={!online}
+                onChange={(e) => setSupplierId(e.target.value)}
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2 disabled:opacity-40"
+              >
+                <option value="">{t("purchases.noSupplier")}</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
 
-            {items.map((it, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-cream-soft p-2">
-                <select
-                  value={it.stock_item_id}
-                  disabled={!online}
-                  onChange={(e) => updateDraftItem(i, { stock_item_id: e.target.value })}
-                  className="flex-1 rounded-lg border border-black/20 bg-white px-2 py-1 text-sm"
-                >
-                  {stockItems.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={it.quantity}
-                  disabled={!online}
-                  onChange={(e) => updateDraftItem(i, { quantity: e.target.value })}
-                  placeholder={t("purchases.quantity")}
-                  className="w-20 rounded-lg border border-black/20 bg-white px-2 py-1 text-sm"
+              {items.map((it, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-cream-soft p-2">
+                  <select
+                    value={it.stock_item_id}
+                    disabled={!online}
+                    onChange={(e) => updateDraftItem(i, { stock_item_id: e.target.value })}
+                    className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm"
+                  >
+                    {stockItems.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={it.quantity}
+                    disabled={!online}
+                    onChange={(e) => updateDraftItem(i, { quantity: e.target.value })}
+                    placeholder={t("purchases.quantity")}
+                    className="w-20 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={it.unit_cost}
+                    disabled={!online}
+                    onChange={(e) => updateDraftItem(i, { unit_cost: e.target.value })}
+                    placeholder={t("purchases.unitCost")}
+                    className="w-24 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm"
+                  />
+                  <button onClick={() => removeDraftItem(i)} className="px-2 text-xl text-red-700">
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              <TileButton
+                emoji="➕"
+                label={t("purchases.addItem")}
+                variant="dashed"
+                onClick={addDraftItem}
+                disabled={!online || stockItems.length === 0}
+              />
+
+              {items.length > 0 && (
+                <p className="text-right font-display text-2xl tabular-nums text-brand">
+                  {t("purchases.total", { total: money(total) })}
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <TileButton
+                  emoji="✓"
+                  label={t("purchases.save")}
+                  onClick={() => void save()}
+                  disabled={!online || saving || items.every((it) => !Number(it.quantity))}
                 />
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={it.unit_cost}
-                  disabled={!online}
-                  onChange={(e) => updateDraftItem(i, { unit_cost: e.target.value })}
-                  placeholder={t("purchases.unitCost")}
-                  className="w-24 rounded-lg border border-black/20 bg-white px-2 py-1 text-sm"
-                />
-                <button onClick={() => removeDraftItem(i)} className="px-2 text-xl text-red-700">
+                <button onClick={() => setCreating(false)} className="rounded-2xl border border-black/20 px-4">
                   ×
                 </button>
               </div>
-            ))}
-
-            <button
-              onClick={addDraftItem}
-              disabled={!online || stockItems.length === 0}
-              className="w-full rounded-lg border border-brand py-2 text-sm font-semibold text-brand disabled:opacity-40"
-            >
-              {t("purchases.addItem")}
-            </button>
-
-            {items.length > 0 && (
-              <p className="text-right text-sm text-ink-muted">{t("purchases.total", { total: money(total) })}</p>
-            )}
-
-            <button
-              onClick={() => void save()}
-              disabled={!online || saving || items.every((it) => !Number(it.quantity))}
-              className="w-full rounded-2xl bg-brand py-3 font-semibold text-cream disabled:opacity-40"
-            >
-              {t("purchases.save")}
-            </button>
-          </section>
+            </Card>
+          ) : (
+            <TileButton emoji="🛒" label={t("purchases.new")} variant="dashed" onClick={() => setCreating(true)} disabled={!online} />
+          )}
 
           <section>
-            <h2 className="mb-2 font-display text-xl">{t("purchases.recent")}</h2>
-            <ul className="divide-y divide-black/10 rounded-2xl bg-white">
-              {purchases.length === 0 && (
-                <li className="p-4 text-center text-ink-muted">{t("purchases.empty")}</li>
-              )}
-              {purchases.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-2 p-3 text-sm">
-                  <span>
-                    {new Date(p.purchased_at).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")} ·{" "}
-                    {supplierName(p.supplier_id)}
-                  </span>
-                  <span className="font-semibold">{p.total != null ? money(p.total) : "—"}</span>
-                </li>
-              ))}
-            </ul>
+            <h2 className="mb-2 mt-2 font-display text-xl">{t("purchases.recent")}</h2>
+            {purchases.length === 0 ? (
+              <EmptyState emoji="🛒" text={t("purchases.empty")} />
+            ) : (
+              <div className="space-y-2">
+                {purchases.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 rounded-2xl bg-white p-4 shadow-sm"
+                  >
+                    <span className="text-sm">
+                      {new Date(p.purchased_at).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")} ·{" "}
+                      {supplierName(p.supplier_id)}
+                    </span>
+                    <span className="font-display text-lg text-brand">{p.total != null ? money(p.total) : "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       )}

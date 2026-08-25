@@ -1,13 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { ensureFreshSession, useAuth, type Identity } from "../auth";
-import { LangToggle, useLang } from "../i18n";
-import { getSupabase } from "../supabase";
 import { money } from "../config";
+import { useLang } from "../i18n";
+import { getSupabase } from "../supabase";
 import type { Expense, ExpenseType } from "../types";
 import LoginScreen from "./LoginScreen";
+import { AdminHeader, Card, EmptyState, SegmentedPicker, TileButton } from "./ui";
 
-const TYPES: ExpenseType[] = ["despesa", "entrada", "movimento_caixa"];
-const CATEGORIES = ["ingredientes", "embalagem", "operacional", "equipamentos", "marketing", "administrativo"];
+const TYPES: { value: ExpenseType; emoji: string }[] = [
+  { value: "despesa", emoji: "🧾" },
+  { value: "entrada", emoji: "💵" },
+  { value: "movimento_caixa", emoji: "🔁" },
+];
+
+const CATEGORY_EMOJI: Record<string, string> = {
+  ingredientes: "🍓",
+  embalagem: "📦",
+  operacional: "🎪",
+  equipamentos: "🔧",
+  marketing: "📣",
+  administrativo: "🗂️",
+};
+const CATEGORIES = Object.keys(CATEGORY_EMOJI);
 
 interface DailyRow {
   local_date: string;
@@ -43,6 +57,7 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [daily, setDaily] = useState<DailyRow[]>([]);
+  const [creating, setCreating] = useState(false);
   const [type, setType] = useState<ExpenseType>("despesa");
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState("");
@@ -90,6 +105,7 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
         setExpenses((prev) => [data as Expense, ...prev]);
         setDescription("");
         setValue("");
+        setCreating(false);
         void load();
       }
     } catch {
@@ -99,14 +115,7 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
-        <button onClick={onClose} className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold">
-          <span className="text-2xl leading-none">‹</span>
-          {t("nav.home")}
-        </button>
-        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("finance.title")}</h1>
-        <LangToggle />
-      </header>
+      <AdminHeader title={t("finance.title")} onClose={onClose} />
 
       {!online && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -117,110 +126,98 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
       {loading && <p className="p-6 text-center text-ink-muted">{t("operation.loading")}</p>}
 
       {!loading && (
-        <div className="flex-1 space-y-4 p-4">
-          <p className="rounded-lg bg-brand/10 p-3 text-sm text-brand-dark">{t("finance.rule")}</p>
+        <div className="flex-1 space-y-3 p-4">
+          <p className="rounded-2xl bg-brand/10 p-3 text-center text-sm font-semibold text-brand-dark">
+            {t("finance.rule")}
+          </p>
 
-          <section className="space-y-2 rounded-2xl bg-white p-3">
-            <p className="text-sm font-semibold">{t("finance.newExpense")}</p>
-            <div className="flex flex-wrap gap-2">
-              <select
+          {creating ? (
+            <Card>
+              <p className="font-display text-lg">{t("finance.newExpense")}</p>
+              <SegmentedPicker
+                options={TYPES.map((ty) => ({ ...ty, label: t(`finance.type.${ty.value}`) }))}
                 value={type}
-                disabled={!online}
-                onChange={(e) => setType(e.target.value as ExpenseType)}
-                className="rounded-lg border border-black/20 bg-white px-2 py-2 text-sm"
-              >
-                {TYPES.map((ty) => (
-                  <option key={ty} value={ty}>
-                    {t(`finance.type.${ty}`)}
-                  </option>
-                ))}
-              </select>
-              <select
+                onChange={setType}
+              />
+              <SegmentedPicker
+                options={CATEGORIES.map((c) => ({ value: c, emoji: CATEGORY_EMOJI[c], label: t(`finance.category.${c}`) }))}
                 value={category}
-                disabled={!online}
-                onChange={(e) => setCategory(e.target.value)}
-                className="rounded-lg border border-black/20 bg-white px-2 py-2 text-sm"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {t(`finance.category.${c}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <input
-              value={description}
-              disabled={!online}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("finance.descriptionPlaceholder")}
-              className="w-full rounded-lg border border-black/20 bg-white px-3 py-2 disabled:opacity-40"
-            />
-            <div className="flex gap-2">
+                onChange={setCategory}
+              />
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t("finance.descriptionPlaceholder")}
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2"
+              />
               <input
                 type="number"
                 inputMode="decimal"
                 value={value}
-                disabled={!online}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={t("finance.valuePlaceholder")}
-                className="flex-1 rounded-lg border border-black/20 bg-white px-3 py-2 disabled:opacity-40"
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2"
               />
-              <button
-                onClick={() => void addExpense()}
-                disabled={!online || !value}
-                className="rounded-lg bg-brand px-4 py-2 font-semibold text-cream disabled:opacity-40"
-              >
-                {t("finance.save")}
-              </button>
-            </div>
-          </section>
+              <div className="flex gap-2">
+                <TileButton emoji="✓" label={t("finance.save")} onClick={() => void addExpense()} disabled={!value} />
+                <button onClick={() => setCreating(false)} className="rounded-2xl border border-black/20 px-4">
+                  ×
+                </button>
+              </div>
+            </Card>
+          ) : (
+            <TileButton emoji="🧾" label={t("finance.newExpense")} variant="dashed" onClick={() => setCreating(true)} disabled={!online} />
+          )}
 
           <section>
-            <h2 className="mb-2 font-display text-xl">{t("finance.summary")}</h2>
-            <ul className="divide-y divide-black/10 rounded-2xl bg-white">
-              {daily.length === 0 && (
-                <li className="p-4 text-center text-ink-muted">{t("finance.summaryEmpty")}</li>
-              )}
-              {daily.map((d) => (
-                <li key={d.local_date} className="space-y-1 p-3 text-sm">
-                  <p className="font-semibold">
-                    {new Date(d.local_date).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")}
-                  </p>
-                  <p className="text-ink-muted">
-                    {t("stat.cashbox", { cash: money(d.receita_dinheiro), twint: money(d.receita_twint) })}
-                  </p>
-                  {(d.despesas > 0 || d.entradas > 0 || d.movimentos_caixa > 0) && (
-                    <p className="text-ink-muted">
-                      {t("finance.dayExtra", {
-                        despesas: money(d.despesas),
-                        entradas: money(d.entradas),
-                        caixa: money(d.movimentos_caixa),
-                      })}
+            <h2 className="mb-2 mt-2 font-display text-xl">{t("finance.summary")}</h2>
+            {daily.length === 0 ? (
+              <EmptyState emoji="📊" text={t("finance.summaryEmpty")} />
+            ) : (
+              <div className="space-y-2">
+                {daily.map((d) => (
+                  <Card key={d.local_date}>
+                    <p className="font-display text-lg">
+                      {new Date(d.local_date).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")}
                     </p>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    <p className="text-sm text-ink-muted">
+                      {t("stat.cashbox", { cash: money(d.receita_dinheiro), twint: money(d.receita_twint) })}
+                    </p>
+                    {(d.despesas > 0 || d.entradas > 0 || d.movimentos_caixa > 0) && (
+                      <p className="text-sm text-ink-muted">
+                        {t("finance.dayExtra", {
+                          despesas: money(d.despesas),
+                          entradas: money(d.entradas),
+                          caixa: money(d.movimentos_caixa),
+                        })}
+                      </p>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
           </section>
 
           <section>
-            <h2 className="mb-2 font-display text-xl">{t("finance.recent")}</h2>
-            <ul className="divide-y divide-black/10 rounded-2xl bg-white">
-              {expenses.length === 0 && (
-                <li className="p-4 text-center text-ink-muted">{t("finance.empty")}</li>
-              )}
-              {expenses.map((e) => (
-                <li key={e.id} className="p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span>
-                      {t(`finance.type.${e.type}`)} · {new Date(e.occurred_at).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")}
-                    </span>
-                    <span className="font-semibold">{money(e.value)}</span>
-                  </div>
-                  {e.description && <p className="text-ink-muted">{e.description}</p>}
-                </li>
-              ))}
-            </ul>
+            <h2 className="mb-2 mt-2 font-display text-xl">{t("finance.recent")}</h2>
+            {expenses.length === 0 ? (
+              <EmptyState emoji="🧾" text={t("finance.empty")} />
+            ) : (
+              <div className="space-y-2">
+                {expenses.map((e) => (
+                  <Card key={e.id}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm">
+                        {CATEGORY_EMOJI[e.category ?? ""] ?? "🧾"} {t(`finance.type.${e.type}`)} ·{" "}
+                        {new Date(e.occurred_at).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")}
+                      </span>
+                      <span className="font-display text-lg text-brand">{money(e.value)}</span>
+                    </div>
+                    {e.description && <p className="text-sm text-ink-muted">{e.description}</p>}
+                  </Card>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       )}

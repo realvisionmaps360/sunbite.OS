@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { ensureFreshSession, useAuth } from "../auth";
-import { LangToggle, useLang } from "../i18n";
+import { useLang } from "../i18n";
 import { getSupabase } from "../supabase";
 import type { Equipment, EquipmentStatus } from "../types";
 import LoginScreen from "./LoginScreen";
+import { AdminHeader, Card, EmptyState, SegmentedPicker, StatusPill, TileButton } from "./ui";
 
-const STATUSES: EquipmentStatus[] = ["ok", "issue", "broken", "missing"];
+const STATUSES: { value: EquipmentStatus; emoji: string }[] = [
+  { value: "ok", emoji: "✅" },
+  { value: "issue", emoji: "⚠️" },
+  { value: "broken", emoji: "❌" },
+  { value: "missing", emoji: "❓" },
+];
+
+const STATUS_TONE: Record<EquipmentStatus, "ok" | "warn" | "danger" | "neutral"> = {
+  ok: "ok",
+  issue: "warn",
+  broken: "danger",
+  missing: "neutral",
+};
 
 /**
  * Tela de Equipamento (Etapa 7) — exige sessao, igual OperationScreen.
@@ -30,6 +43,7 @@ function EquipmentBody({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Equipment[]>([]);
   const [newName, setNewName] = useState("");
+  const [adding, setAdding] = useState(false);
   const online = navigator.onLine;
 
   const load = useCallback(async () => {
@@ -69,6 +83,7 @@ function EquipmentBody({ onClose }: { onClose: () => void }) {
         .single();
       if (data) setItems((prev) => [...prev, data as Equipment]);
       setNewName("");
+      setAdding(false);
     } catch {
       // Sem rede: nada a fazer, o aviso ja esta na tela.
     }
@@ -76,14 +91,7 @@ function EquipmentBody({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
-        <button onClick={onClose} className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold">
-          <span className="text-2xl leading-none">‹</span>
-          {t("nav.home")}
-        </button>
-        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("equipment.title")}</h1>
-        <LangToggle />
-      </header>
+      <AdminHeader title={t("equipment.title")} onClose={onClose} />
 
       {!online && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -94,72 +102,63 @@ function EquipmentBody({ onClose }: { onClose: () => void }) {
       {loading && <p className="p-6 text-center text-ink-muted">{t("operation.loading")}</p>}
 
       {!loading && (
-        <div className="flex-1 space-y-4 p-4">
-          <ul className="divide-y divide-black/10 rounded-2xl bg-white">
-            {items.length === 0 && (
-              <li className="p-4 text-center text-ink-muted">{t("equipment.empty")}</li>
-            )}
-            {items.map((eq) => (
-              <li key={eq.id} className="space-y-2 p-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 font-semibold">{eq.name}</span>
-                  {eq.critical && (
-                    <span className="shrink-0 rounded-full bg-red-700/10 px-2 py-0.5 text-xs font-semibold text-red-800">
-                      {t("checklist.critical")}
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={eq.status}
-                    disabled={!online}
-                    onChange={(e) => void updateItem(eq.id, { status: e.target.value as EquipmentStatus })}
-                    className="rounded-lg border border-black/20 bg-white px-2 py-1 text-sm disabled:opacity-40"
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {t(`equipment.status.${s}`)}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={eq.critical}
-                      disabled={!online}
-                      onChange={(e) => void updateItem(eq.id, { critical: e.target.checked })}
-                    />
-                    {t("checklist.critical")}
-                  </label>
-                </div>
-                <input
-                  value={eq.notes ?? ""}
-                  disabled={!online}
-                  placeholder={t("equipment.notesPlaceholder")}
-                  onChange={(e) => setItems((prev) => prev.map((x) => (x.id === eq.id ? { ...x, notes: e.target.value } : x)))}
-                  onBlur={(e) => void updateItem(eq.id, { notes: e.target.value })}
-                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2 text-sm disabled:opacity-40"
-                />
-              </li>
-            ))}
-          </ul>
+        <div className="flex-1 space-y-3 p-4">
+          {items.length === 0 && <EmptyState emoji="🔧" text={t("equipment.empty")} />}
 
-          <div className="flex gap-2">
-            <input
-              value={newName}
-              disabled={!online}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={t("equipment.namePlaceholder")}
-              className="flex-1 rounded-lg border border-black/20 bg-white px-3 py-2 disabled:opacity-40"
-            />
-            <button
-              onClick={() => void addItem()}
-              disabled={!online || !newName.trim()}
-              className="rounded-lg bg-brand px-4 py-2 font-semibold text-cream disabled:opacity-40"
-            >
-              {t("equipment.add")}
-            </button>
-          </div>
+          {items.map((eq) => (
+            <Card key={eq.id}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="flex-1 font-display text-lg leading-tight">{eq.name}</p>
+                <StatusPill tone={STATUS_TONE[eq.status]}>{t(`equipment.status.${eq.status}`)}</StatusPill>
+              </div>
+
+              <SegmentedPicker
+                options={STATUSES.map((s) => ({ ...s, label: t(`equipment.status.${s.value}`) }))}
+                value={eq.status}
+                disabled={!online}
+                onChange={(v) => void updateItem(eq.id, { status: v })}
+              />
+
+              <label className="flex items-center gap-2 text-sm text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={eq.critical}
+                  disabled={!online}
+                  onChange={(e) => void updateItem(eq.id, { critical: e.target.checked })}
+                />
+                {t("checklist.critical")}
+              </label>
+
+              <input
+                value={eq.notes ?? ""}
+                disabled={!online}
+                placeholder={t("equipment.notesPlaceholder")}
+                onChange={(e) => setItems((prev) => prev.map((x) => (x.id === eq.id ? { ...x, notes: e.target.value } : x)))}
+                onBlur={(e) => void updateItem(eq.id, { notes: e.target.value })}
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2 text-sm disabled:opacity-40"
+              />
+            </Card>
+          ))}
+
+          {adding ? (
+            <Card>
+              <input
+                value={newName}
+                autoFocus
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={t("equipment.namePlaceholder")}
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2"
+              />
+              <div className="flex gap-2">
+                <TileButton emoji="✓" label={t("equipment.add")} onClick={() => void addItem()} disabled={!newName.trim()} />
+                <button onClick={() => setAdding(false)} className="rounded-2xl border border-black/20 px-4">
+                  ×
+                </button>
+              </div>
+            </Card>
+          ) : (
+            <TileButton emoji="➕" label={t("equipment.add")} variant="dashed" onClick={() => setAdding(true)} disabled={!online} />
+          )}
         </div>
       )}
     </div>

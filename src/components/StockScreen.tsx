@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { ensureFreshSession, useAuth, type Identity } from "../auth";
 import { deviceId } from "../db";
-import { LangToggle, useLang } from "../i18n";
+import { useLang } from "../i18n";
 import { flushOutbox, queueWrite } from "../outbox";
 import { getSupabase } from "../supabase";
 import type { StockItem, StockMovement, StockMovementReason } from "../types";
 import LoginScreen from "./LoginScreen";
+import { AdminHeader, Card, EmptyState, SegmentedPicker, StatusPill, TileButton } from "./ui";
 
-const REASONS: StockMovementReason[] = ["compra", "uso", "ajuste", "perda"];
+const REASONS: { value: StockMovementReason; emoji: string }[] = [
+  { value: "compra", emoji: "🛒" },
+  { value: "uso", emoji: "🔧" },
+  { value: "ajuste", emoji: "⚖️" },
+  { value: "perda", emoji: "📉" },
+];
 
 /**
  * Tela de Estoque (Etapa 7) — exige sessao. Diferente de Equipamento/
@@ -37,6 +43,7 @@ function StockBody({ onClose, identity }: { onClose: () => void; identity: Ident
   const [movingId, setMovingId] = useState<string | null>(null);
   const [reason, setReason] = useState<StockMovementReason>("uso");
   const [qty, setQty] = useState("");
+  const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newUnit, setNewUnit] = useState("");
   const online = navigator.onLine;
@@ -79,6 +86,7 @@ function StockBody({ onClose, identity }: { onClose: () => void; identity: Ident
       if (data) setItems((prev) => [...prev, data as StockItem]);
       setNewName("");
       setNewUnit("");
+      setAdding(false);
     } catch {
       // Sem rede: nada a fazer, o aviso ja esta na tela.
     }
@@ -108,14 +116,7 @@ function StockBody({ onClose, identity }: { onClose: () => void; identity: Ident
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
-        <button onClick={onClose} className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold">
-          <span className="text-2xl leading-none">‹</span>
-          {t("nav.home")}
-        </button>
-        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("stock.title")}</h1>
-        <LangToggle />
-      </header>
+      <AdminHeader title={t("stock.title")} onClose={onClose} />
 
       {!online && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -126,105 +127,97 @@ function StockBody({ onClose, identity }: { onClose: () => void; identity: Ident
       {loading && <p className="p-6 text-center text-ink-muted">{t("operation.loading")}</p>}
 
       {!loading && (
-        <div className="flex-1 space-y-4 p-4">
-          <ul className="divide-y divide-black/10 rounded-2xl bg-white">
-            {items.length === 0 && (
-              <li className="p-4 text-center text-ink-muted">{t("stock.empty")}</li>
-            )}
-            {items.map((item) => {
-              const low = item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold;
-              return (
-                <li key={item.id} className="space-y-2 p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex-1 font-semibold">{item.name}</span>
-                    <span className={low ? "font-semibold text-red-700" : "text-ink-muted"}>
-                      {item.quantity} {item.unit}
-                    </span>
-                  </div>
-                  {low && <p className="text-xs font-semibold text-red-700">{t("stock.lowStockWarning")}</p>}
+        <div className="flex-1 space-y-3 p-4">
+          {items.length === 0 && <EmptyState emoji="📦" text={t("stock.empty")} />}
 
-                  {movingId === item.id ? (
-                    <div className="space-y-2 rounded-lg bg-cream-soft p-2">
-                      <div className="flex flex-wrap gap-2">
-                        <select
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value as StockMovementReason)}
-                          className="rounded-lg border border-black/20 bg-white px-2 py-1 text-sm"
-                        >
-                          {REASONS.map((r) => (
-                            <option key={r} value={r}>
-                              {t(`stock.reason.${r}`)}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          value={qty}
-                          onChange={(e) => setQty(e.target.value)}
-                          placeholder={t("stock.movementQty")}
-                          className="w-24 rounded-lg border border-black/20 bg-white px-2 py-1 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => void registerMovement(item)}
-                          disabled={!qty}
-                          className="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-cream disabled:opacity-40"
-                        >
-                          {t("stock.movementSave")}
-                        </button>
-                        <button
-                          onClick={() => setMovingId(null)}
-                          className="rounded-lg border border-black/20 px-4 py-2 text-sm"
-                        >
-                          {t("pay.back")}
-                        </button>
-                      </div>
+          {items.map((item) => {
+            const low = item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold;
+            return (
+              <Card key={item.id}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex-1 font-display text-lg leading-tight">{item.name}</p>
+                  {low && <StatusPill tone="danger">{t("stock.lowStockWarning")}</StatusPill>}
+                </div>
+                <p className="font-display text-4xl tabular-nums text-brand">
+                  {item.quantity} <span className="text-xl text-ink-muted">{item.unit}</span>
+                </p>
+
+                {movingId === item.id ? (
+                  <div className="space-y-3 rounded-xl bg-cream-soft p-3">
+                    <SegmentedPicker
+                      options={REASONS.map((r) => ({ ...r, label: t(`stock.reason.${r.value}`) }))}
+                      value={reason}
+                      onChange={setReason}
+                    />
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      autoFocus
+                      value={qty}
+                      onChange={(e) => setQty(e.target.value)}
+                      placeholder={t("stock.movementQty")}
+                      className="w-full rounded-lg border border-black/10 bg-white px-3 py-2"
+                    />
+                    <div className="flex gap-2">
+                      <TileButton
+                        emoji="✓"
+                        label={t("stock.movementSave")}
+                        onClick={() => void registerMovement(item)}
+                        disabled={!qty}
+                      />
+                      <button onClick={() => setMovingId(null)} className="rounded-2xl border border-black/20 px-4">
+                        ×
+                      </button>
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setMovingId(item.id);
-                        setQty("");
-                      }}
-                      className="w-full rounded-lg border border-brand py-2 text-sm font-semibold text-brand"
-                    >
-                      {t("stock.registerMovement")}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                  </div>
+                ) : (
+                  <TileButton
+                    emoji="📝"
+                    label={t("stock.registerMovement")}
+                    variant="outline"
+                    onClick={() => {
+                      setMovingId(item.id);
+                      setQty("");
+                    }}
+                  />
+                )}
+              </Card>
+            );
+          })}
 
-          <div className="space-y-2 rounded-2xl bg-white p-3">
-            <p className="text-sm font-semibold">{t("stock.addItem")}</p>
-            <div className="flex gap-2">
+          {adding ? (
+            <Card>
+              <p className="text-sm font-semibold">{t("stock.addItem")}</p>
               <input
                 value={newName}
+                autoFocus
                 disabled={!online}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder={t("equipment.namePlaceholder")}
-                className="flex-1 rounded-lg border border-black/20 bg-white px-3 py-2 disabled:opacity-40"
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2 disabled:opacity-40"
               />
               <input
                 value={newUnit}
                 disabled={!online}
                 onChange={(e) => setNewUnit(e.target.value)}
                 placeholder={t("stock.unitPlaceholder")}
-                className="w-24 rounded-lg border border-black/20 bg-white px-3 py-2 disabled:opacity-40"
+                className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2 disabled:opacity-40"
               />
-              <button
-                onClick={() => void addItem()}
-                disabled={!online || !newName.trim() || !newUnit.trim()}
-                className="rounded-lg bg-brand px-4 py-2 font-semibold text-cream disabled:opacity-40"
-              >
-                {t("equipment.add")}
-              </button>
-            </div>
-            {!online && <p className="text-xs text-ink-muted">{t("stock.needsInternet")}</p>}
-          </div>
+              <div className="flex gap-2">
+                <TileButton
+                  emoji="✓"
+                  label={t("equipment.add")}
+                  onClick={() => void addItem()}
+                  disabled={!online || !newName.trim() || !newUnit.trim()}
+                />
+                <button onClick={() => setAdding(false)} className="rounded-2xl border border-black/20 px-4">
+                  ×
+                </button>
+              </div>
+            </Card>
+          ) : (
+            <TileButton emoji="➕" label={t("stock.addItem")} variant="dashed" onClick={() => setAdding(true)} disabled={!online} />
+          )}
         </div>
       )}
     </div>

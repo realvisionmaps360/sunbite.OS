@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ensureFreshSession, login, logout, useAuth } from "../auth";
-import { LangToggle, useLang } from "../i18n";
+import { useLang } from "../i18n";
+import { AdminHeader } from "./ui";
 
 export default function LoginScreen({ onClose }: { onClose: () => void }) {
   const { t } = useLang();
@@ -29,17 +30,7 @@ export default function LoginScreen({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold"
-        >
-          <span className="text-2xl leading-none">‹</span>
-          {t("nav.home")}
-        </button>
-        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("auth.title")}</h1>
-        <LangToggle />
-      </header>
+      <AdminHeader title={t("auth.title")} onClose={onClose} />
 
       <div className="space-y-6 p-4">
         {loggedIn && (

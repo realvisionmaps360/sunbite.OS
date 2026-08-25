@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { allSales, deviceId, pendingSales } from "../db";
-import { LangToggle, useLang } from "../i18n";
+import { useLang } from "../i18n";
 import { readLog, type LogRow } from "../log";
 import { ensureFreshSession, useAuth, type AuthState } from "../auth";
 import { getSupabase } from "../supabase";
 import type { Sale } from "../types";
+import { AdminHeader, Card, EmptyState } from "./ui";
 
 type Tab = "errors" | "log" | "device";
 
@@ -40,17 +41,7 @@ export default function SystemScreen({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold"
-        >
-          <span className="text-2xl leading-none">‹</span>
-          {t("nav.home")}
-        </button>
-        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("system.title")}</h1>
-        <LangToggle />
-      </header>
+      <AdminHeader title={t("system.title")} onClose={onClose} />
 
       <nav className="flex gap-1 bg-brand px-3 pb-3">
         {(["errors", "log", "device"] as Tab[]).map((v) => (
@@ -88,7 +79,7 @@ function ErrorsTab({ pending, logRows }: { pending: Sale[]; logRows: LogRow[] })
 
   return (
     <div className="flex-1 space-y-5 overflow-y-auto p-4">
-      <section className="rounded-2xl bg-brand-dark p-4 text-cream">
+      <div className="space-y-3 rounded-2xl bg-brand-dark p-4 text-cream">
         <p className="text-xs uppercase tracking-widest opacity-70">
           {pending.length === 0
             ? t("system.errors.pendingEmpty")
@@ -97,7 +88,7 @@ function ErrorsTab({ pending, logRows }: { pending: Sale[]; logRows: LogRow[] })
               })}
         </p>
         {pending.length > 0 && (
-          <ul className="mt-2 space-y-1 text-sm">
+          <ul className="space-y-1 text-sm">
             {pending.map((s) => (
               <li key={s.id} className="opacity-90">
                 {s.local_date} {s.local_time.slice(0, 5)} · {s.cup_count} ·{" "}
@@ -106,17 +97,17 @@ function ErrorsTab({ pending, logRows }: { pending: Sale[]; logRows: LogRow[] })
             ))}
           </ul>
         )}
-      </section>
+      </div>
 
       <section>
         <h2 className="mb-2 font-display text-xl">{t("system.errors.lastFailure")}</h2>
         {lastFailure ? (
-          <div className="rounded-2xl bg-red-700/10 p-3 text-red-800">
-            <p className="text-xs opacity-70">{fmtWhen(lastFailure.at)}</p>
-            <p className="font-semibold">{lastFailure.message}</p>
-          </div>
+          <Card className="bg-red-700/10">
+            <p className="text-xs text-red-800/70">{fmtWhen(lastFailure.at)}</p>
+            <p className="font-semibold text-red-800">{lastFailure.message}</p>
+          </Card>
         ) : (
-          <p className="text-ink-muted">{t("system.errors.noFailure")}</p>
+          <EmptyState emoji="✅" text={t("system.errors.noFailure")} />
         )}
       </section>
 
@@ -177,17 +168,18 @@ function LogTab({ auth, logRows }: { auth: AuthState; logRows: LogRow[] }) {
       <h2 className="font-display text-xl">{t("system.log.heading")}</h2>
 
       {server ? (
-        <ul className="divide-y divide-black/10 rounded-2xl bg-white">
-          {server.length === 0 && (
-            <li className="p-4 text-center text-ink-muted">{t("system.empty")}</li>
-          )}
-          {server.map((r, i) => (
-            <li key={i} className="p-3">
-              <p className="text-xs text-ink-muted">{fmtWhen(r.occurred_at)}</p>
-              <p>{r.message}</p>
-            </li>
-          ))}
-        </ul>
+        server.length === 0 ? (
+          <EmptyState emoji="🗒️" text={t("system.empty")} />
+        ) : (
+          <div className="space-y-2">
+            {server.map((r, i) => (
+              <Card key={i}>
+                <p className="text-xs text-ink-muted">{fmtWhen(r.occurred_at)}</p>
+                <p>{r.message}</p>
+              </Card>
+            ))}
+          </div>
+        )
       ) : (
         <>
           <p className="text-sm text-ink-muted">
@@ -202,17 +194,17 @@ function LogTab({ auth, logRows }: { auth: AuthState; logRows: LogRow[] }) {
 
 function LogList({ rows, emptyText }: { rows: LogRow[]; emptyText: string }) {
   if (rows.length === 0) {
-    return <p className="text-ink-muted">{emptyText}</p>;
+    return <EmptyState emoji="🗒️" text={emptyText} />;
   }
   return (
-    <ul className="divide-y divide-black/10 rounded-2xl bg-white">
+    <div className="space-y-2">
       {rows.map((r) => (
-        <li key={r.id} className="p-3">
+        <Card key={r.id}>
           <p className="text-xs text-ink-muted">{fmtWhen(r.at)}</p>
           <p className={r.kind === "error" ? "text-red-800" : ""}>{r.message}</p>
-        </li>
+        </Card>
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -277,14 +269,14 @@ function DeviceTab({
 
   return (
     <div className="flex-1 space-y-3 overflow-y-auto p-4">
-      <ul className="divide-y divide-black/10 rounded-2xl bg-white">
+      <Card>
         {rows.map(([label, value]) => (
-          <li key={label} className="flex items-center justify-between p-3">
-            <span className="text-ink-muted">{label}</span>
-            <span className="font-semibold">{value}</span>
-          </li>
+          <div key={label} className="flex items-center justify-between gap-2 border-b border-black/5 pb-2 last:border-0 last:pb-0">
+            <span className="text-sm text-ink-muted">{label}</span>
+            <span className="text-right text-sm font-semibold">{value}</span>
+          </div>
         ))}
-      </ul>
+      </Card>
       <p className="text-center text-sm text-ink-muted">{t("system.device.updateInfo")}</p>
     </div>
   );
