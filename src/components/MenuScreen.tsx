@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import { TOPPINGS, money } from "../config";
 import { LangToggle, useLang } from "../i18n";
 import { getCupPrice, getToppingPrice } from "../prices";
-import { useSwipe } from "../useSwipe";
 
 /**
  * Cardapio. So leitura.
@@ -19,7 +18,6 @@ export function MenuScreen({ onClose }: { onClose: () => void }) {
   const toppingPrice = getToppingPrice();
 
   // Veio da direita: para dispensar, empurra de volta para a direita.
-  useSwipe({ onDireita: onClose });
 
   // Derivado de TOPPINGS.length, nunca uma lista fixa: entrou o marshmallow e
   // a tabela passou a ir ate 4 sozinha. A ultima linha e sempre "com todos".
@@ -35,8 +33,8 @@ export function MenuScreen({ onClose }: { onClose: () => void }) {
   return (
     <motion.div
       className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream"
-      /* Entra pela direita acompanhando o dedo: o gesto que abre esta tela é
-         arrastar da direita para a esquerda, então ela vem de lá. */
+      /* Entra pela direita: a animação dá direção à abertura e o × devolve
+         para o mesmo lado. */
       initial={{ x: "100%" }}
       animate={{ x: 0 }}
       exit={{ x: "100%" }}

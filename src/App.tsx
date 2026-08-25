@@ -30,7 +30,6 @@ import { getCachedOpenOperationId, refreshOpenOperationId } from "./operations";
 import { useOrder } from "./order";
 import { refreshPrices } from "./prices";
 import { loadConfig, syncNow } from "./sync";
-import { useSwipe } from "./useSwipe";
 import type { Payment, Sale } from "./types";
 
 // Este arquivo nunca importa ./auth nem ./supabase, em lugar nenhum — e essa
@@ -122,15 +121,6 @@ export default function App() {
     };
   }, [refreshPending]);
 
-  // Gesto lateral, só na tela de venda. No meio de fechar uma venda —
-  // pagamento, conferência ou comemoração — ele fica desligado, porque ali
-  // um deslize lateral só atrapalha.
-  useSwipe({
-    ativo: screen === "sale" && !confirmation,
-    onDireita: () => setScreen("sales"),
-    onEsquerda: () => setScreen("menu"),
-  });
-
   /**
    * Botão/gesto físico de voltar do celular (Android): sem isto, como o app
    * não usa rotas de verdade, ele não tem para onde "voltar" e o sistema
@@ -152,10 +142,10 @@ export default function App() {
         setScreen("sale");
         return;
       case "payment":
-      case "sales":
-      case "menu":
         setScreen("sale");
         return;
+      case "sales":
+      case "menu":
       case "settings":
       case "login":
       case "system":
@@ -250,11 +240,9 @@ export default function App() {
   }
 
   const empty = order.cups.length === 0;
-  /** Fecha Vendas/Cardápio de volta para Vender — são alcançadas pelo gesto a
-   * partir de lá, e fechar devolve exatamente de onde vieram. */
-  const fechar = () => setScreen("sale");
-  /** Fecha as telas administrativas de volta para a Home — são alcançadas
-   * pelos botões grandes da Home, nunca pelo gesto. */
+  /** Cancela o pagamento e devolve o pedido intacto para Vender. */
+  const cancelarPagamento = () => setScreen("sale");
+  /** Fecha as telas administrativas de volta para a Home. */
   const voltarHome = () => setScreen("home");
 
   if (screen === "home") {
@@ -346,7 +334,7 @@ export default function App() {
         <PaymentSheet
           total={order.total}
           onPick={choosePayment}
-          onCancel={fechar}
+          onCancel={cancelarPagamento}
         />
       )}
 
@@ -369,11 +357,11 @@ export default function App() {
         {screen === "sales" && (
           <SalesScreen
             key="sales"
-            onClose={fechar}
+            onClose={voltarHome}
             onDataChanged={refreshPending}
           />
         )}
-        {screen === "menu" && <MenuScreen key="menu" onClose={fechar} />}
+        {screen === "menu" && <MenuScreen key="menu" onClose={voltarHome} />}
       </AnimatePresence>
 
       {screen === "settings" && (

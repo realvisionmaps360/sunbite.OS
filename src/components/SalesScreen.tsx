@@ -5,7 +5,6 @@ import { allSales, cancelSale, today } from "../db";
 import { LangToggle, useLang } from "../i18n";
 import { byDay, shortDate, summarize, toppingRanking } from "../sales";
 import { syncNow } from "../sync";
-import { useSwipe } from "../useSwipe";
 import { Valor } from "./Valor";
 import { isActive, type Sale } from "../types";
 
@@ -46,15 +45,14 @@ export function SalesScreen({
   }
 
   // Veio da esquerda: para dispensar, empurra de volta para a esquerda.
-  useSwipe({ onEsquerda: onClose });
 
   const todayRows = sales.filter((s) => s.local_date === today());
 
   return (
     <motion.div
       className="fixed inset-0 z-20 flex flex-col bg-cream-soft"
-      /* Entra pela esquerda acompanhando o dedo: o gesto que abre esta tela é
-         arrastar da esquerda para a direita, então ela vem de lá. */
+      /* Entra pela esquerda: a animação dá direção à abertura e o × devolve
+         para o mesmo lado. */
       initial={{ x: "-100%" }}
       animate={{ x: 0 }}
       exit={{ x: "-100%" }}

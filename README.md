@@ -41,25 +41,16 @@ preco sai de [`src/config.ts`](src/config.ts) — nenhum numero digitado a mao a
 
 **Ajustes** — precos, conexao com o Supabase e a limpeza das vendas de hoje.
 
-## Gestos
+## Navegacao
 
-| Dedo na tela de venda | Painel entra por | Tela |
-|---|---|---|
-| esquerda → direita | esquerda | Vendas |
-| direita → esquerda | direita | Cardapio |
+Cada tela tem seu botao na Home, e volta para la pelo **‹ Inicio** (ou pelo **×**, em
+Vendas e Cardapio, que voltam para Vender). O botao fisico de voltar do Android faz o
+mesmo caminho — ver `goBack()` em [`src/App.tsx`](src/App.tsx).
 
-O painel entra pelo lado de onde o dedo veio e **acompanha o movimento**. Entrar pelo
-lado oposto parece errado mesmo funcionando: o painel anda contra o dedo.
-
-Dentro delas, o gesto contrario fecha — empurra o painel de volta para o lado de onde
-ele veio. Os botoes no topo continuam funcionando: **gesto
-e atalho, nunca o unico caminho**.
-
-Tres travas em [`src/useSwipe.ts`](src/useSwipe.ts), e sao elas que decidem se o gesto
-ajuda ou irrita:
-minimo de 60px na horizontal, horizontal precisa vencer a vertical (senao rolar a lista
-abriria tela sem querer), e nada acontece enquanto pagamento, conferencia ou comemoracao
-estao na tela.
+Ate a Etapa 8 a tela de venda tinha gestos laterais (arrastar abria Vendas e Cardapio),
+heranca de quando o app era so o PDV. **Removidos na Etapa 9, a pedido do Felipe**: com
+uma pagina propria para cada coisa, o gesto virou um segundo caminho para o mesmo lugar,
+e um caminho que disparava sem querer no meio do atendimento.
 
 ## Numeros que cabem
 
