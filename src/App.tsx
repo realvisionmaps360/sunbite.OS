@@ -110,6 +110,63 @@ export default function App() {
     onEsquerda: () => setScreen("menu"),
   });
 
+  /**
+   * Botão/gesto físico de voltar do celular (Android): sem isto, como o app
+   * não usa rotas de verdade, ele não tem para onde "voltar" e o sistema
+   * fecha o app direto na primeira tela. Espelha exatamente o que cada botão
+   * de fechar já faz, para o hardware nunca divergir do toque.
+   */
+  const goBack = useCallback(() => {
+    if (confirmation) {
+      setConfirmation(null);
+      return;
+    }
+    if (error) {
+      setError(null);
+      return;
+    }
+    switch (screen) {
+      case "review":
+        setPayment(null);
+        setScreen("sale");
+        return;
+      case "payment":
+      case "sales":
+      case "menu":
+        setScreen("sale");
+        return;
+      case "settings":
+      case "login":
+      case "system":
+      case "operation":
+        setScreen("home");
+        return;
+      case "sale":
+        setScreen("home");
+        return;
+      case "home":
+        // Na raiz, deixa o botão físico agir normal (sai do app).
+        return;
+    }
+  }, [screen, confirmation, error]);
+
+  useEffect(() => {
+    const onPopState = () => goBack();
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [goBack]);
+
+  useEffect(() => {
+    // Mantém sempre uma entrada de histórico "de troco" enquanto não está na
+    // Home — é o que garante que o botão físico dispare popstate (e caia no
+    // goBack de cima) em vez de fechar o app. Na Home, para de empilhar: aí
+    // sim o próximo "voltar" deve sair do app, que é o comportamento certo
+    // na raiz.
+    if (screen !== "home") {
+      history.pushState(null, "");
+    }
+  }, [screen]);
+
   const showError = (text: string) => {
     setError(text);
     window.clearTimeout(errorTimer.current);
