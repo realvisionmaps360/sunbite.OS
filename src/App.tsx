@@ -1,5 +1,6 @@
 import { AnimatePresence } from "framer-motion";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { HomeScreen } from "./components/HomeScreen";
 import { OrderSummary } from "./components/OrderSummary";
 import { PaymentSheet } from "./components/PaymentSheet";
 import { ReviewSheet } from "./components/ReviewSheet";
@@ -26,7 +27,8 @@ import type { Payment, Sale } from "./types";
 // nao entra no barril adminScreens.ts — tem seu proprio lazy() aqui.
 const SystemScreen = lazy(() => import("./components/SystemScreen"));
 
-type Screen =
+export type Screen =
+  | "home"
   | "sale"
   | "payment"
   | "review"
@@ -50,7 +52,7 @@ function stamp() {
 export default function App() {
   const { t } = useLang();
   const order = useOrder();
-  const [screen, setScreen] = useState<Screen>("sale");
+  const [screen, setScreen] = useState<Screen>("home");
   const [payment, setPayment] = useState<Payment | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -162,22 +164,28 @@ export default function App() {
   }
 
   const empty = order.cups.length === 0;
+  /** Fecha Vendas/Cardápio de volta para Vender — são alcançadas pelo gesto a
+   * partir de lá, e fechar devolve exatamente de onde vieram. */
   const fechar = () => setScreen("sale");
+  /** Fecha as telas administrativas de volta para a Home — são alcançadas
+   * pelos botões grandes da Home, nunca pelo gesto. */
+  const voltarHome = () => setScreen("home");
+
+  if (screen === "home") {
+    return <HomeScreen onNavigate={setScreen} />;
+  }
 
   return (
     <div className="flex h-full flex-col bg-brand">
-      <div className="flex items-center justify-between gap-1 bg-brand-dark px-2 pt-2 text-cream/80">
-        {/* Gesto é atalho, nunca o único caminho: as duas telas laterais
-            precisam ter botão para quem não descobrir o deslize. */}
-        <div className="flex items-center gap-1">
-          <button onClick={() => setScreen("sales")} className="whitespace-nowrap px-2 py-1 text-sm">
-            {t("nav.sales")}
-          </button>
-          <button onClick={() => setScreen("menu")} className="whitespace-nowrap px-2 py-1 text-sm">
-            {t("nav.menu")}
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 bg-brand-dark px-3 pt-3 pb-1 text-cream/80">
+        <button
+          onClick={() => setScreen("home")}
+          aria-label={t("nav.home")}
+          className="rounded-lg px-2 py-1 text-2xl leading-none"
+        >
+          🏠
+        </button>
+        <div className="flex items-center gap-3">
           {/* Sem Supabase configurado, "pendente" não quer dizer nada — vira um
               alarme permanente. Nesse caso o app só diz onde a venda está. */}
           <span className="whitespace-nowrap text-[11px]">
@@ -188,26 +196,6 @@ export default function App() {
                 : t("status.synced")}
           </span>
           <LangToggle />
-          <button
-            onClick={() => setScreen("operation")}
-            aria-label={t("nav.operation")}
-            className="px-2 py-1 text-sm"
-          >
-            🎪
-          </button>
-          {/* Botao neutro de proposito: nunca mostra logado/deslogado. Fazer
-              isso exigiria ler auth.ts, e a tela de venda nao le estado de
-              login em lugar nenhum. */}
-          <button
-            onClick={() => setScreen("login")}
-            aria-label={t("nav.login")}
-            className="px-2 py-1 text-sm"
-          >
-            👤
-          </button>
-          <button onClick={() => setScreen("settings")} className="px-2 py-1 text-sm">
-            ⚙︎
-          </button>
         </div>
       </div>
 
@@ -304,7 +292,7 @@ export default function App() {
 
       {screen === "settings" && (
         <SettingsScreen
-          onClose={fechar}
+          onClose={voltarHome}
           onDataChanged={refreshPending}
           onOpenSystem={() => setScreen("system")}
         />
@@ -315,7 +303,7 @@ export default function App() {
           fallback={
             <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
               <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={fechar} className="px-3 py-1 text-3xl leading-none">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
                   ×
                 </button>
               </header>
@@ -326,7 +314,7 @@ export default function App() {
           }
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <LoginScreen onClose={fechar} />
+            <LoginScreen onClose={voltarHome} />
           </Suspense>
         </ErrorBoundary>
       )}
@@ -336,7 +324,7 @@ export default function App() {
           fallback={
             <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
               <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={fechar} className="px-3 py-1 text-3xl leading-none">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
                   ×
                 </button>
               </header>
@@ -347,7 +335,7 @@ export default function App() {
           }
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <SystemScreen onClose={fechar} />
+            <SystemScreen onClose={voltarHome} />
           </Suspense>
         </ErrorBoundary>
       )}
@@ -357,7 +345,7 @@ export default function App() {
           fallback={
             <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
               <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={fechar} className="px-3 py-1 text-3xl leading-none">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
                   ×
                 </button>
               </header>
@@ -368,7 +356,7 @@ export default function App() {
           }
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <OperationScreen onClose={fechar} />
+            <OperationScreen onClose={voltarHome} />
           </Suspense>
         </ErrorBoundary>
       )}

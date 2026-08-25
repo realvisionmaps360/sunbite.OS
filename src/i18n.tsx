@@ -16,7 +16,7 @@ export type Lang = "pt" | "de";
  */
 const STRINGS: Record<Lang, Record<string, string>> = {
   pt: {
-    "nav.sales": "📋 Vendas",
+    "nav.home": "Início",
     "status.synced": "sincronizado",
     "status.pending": "{n} a enviar",
     "status.pending_one": "1 a enviar",
@@ -112,8 +112,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.resetNone": "Nenhuma venda hoje.",
     "settings.system": "Sistema",
 
-    "nav.menu": "🍓 Cardápio",
-
     "menu.title": "Cardápio",
     "menu.cup": "Copo de morango com chocolate suíço",
     "menu.cupDesc": "Morangos frescos, chocolate quente na hora, montado na sua frente.",
@@ -136,7 +134,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "confirm.next": "toque para o próximo cliente",
     "error.save": "ERRO ao salvar: {msg}",
 
-    "nav.login": "Entrar",
     "auth.title": "Entrar",
     "auth.email": "E-mail",
     "auth.password": "Senha",
@@ -185,7 +182,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "system.device.logCount": "Linhas de log",
     "system.device.updateInfo": "O app se atualiza sozinho ao reabrir.",
 
-    "nav.operation": "Operação",
     "operation.title": "Operação",
     "operation.loadError": "Não deu para abrir agora. Tente de novo com internet.",
     "operation.loading": "Carregando…",
@@ -213,10 +209,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "pendency.critical": "Crítica",
     "pendency.resolve": "Concluir",
     "pendency.empty": "Nenhuma pendência aberta.",
+
+    "home.title": "Sunbite",
+    "home.sell": "Vender",
+    "home.sales": "Vendas",
+    "home.menu": "Cardápio",
+    "home.operation": "Operação",
+    "home.settings": "Ajustes",
+    "home.system": "Sistema",
+    "home.login": "Entrar",
   },
 
   de: {
-    "nav.sales": "📋 Verkäufe",
+    "nav.home": "Start",
     "status.synced": "synchronisiert",
     "status.pending": "{n} zu senden",
     "status.pending_one": "1 zu senden",
@@ -316,8 +321,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.resetNone": "Heute keine Verkäufe.",
     "settings.system": "System",
 
-    "nav.menu": "🍓 Karte",
-
     "menu.title": "Karte",
     "menu.cup": "Erdbeerbecher mit Schweizer Schokolade",
     "menu.cupDesc": "Frische Erdbeeren, warme Schokolade, frisch vor Ihren Augen zubereitet.",
@@ -340,7 +343,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "confirm.next": "tippen für den nächsten Kunden",
     "error.save": "FEHLER beim Speichern: {msg}",
 
-    "nav.login": "Anmelden",
     "auth.title": "Anmelden",
     "auth.email": "E-Mail",
     "auth.password": "Passwort",
@@ -389,7 +391,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "system.device.logCount": "Log-Einträge",
     "system.device.updateInfo": "Die App aktualisiert sich beim erneuten Öffnen selbst.",
 
-    "nav.operation": "Betrieb",
     "operation.title": "Betrieb",
     "operation.loadError": "Konnte jetzt nicht geöffnet werden. Mit Internet erneut versuchen.",
     "operation.loading": "Lade…",
@@ -418,6 +419,15 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "pendency.critical": "Kritisch",
     "pendency.resolve": "Erledigt",
     "pendency.empty": "Keine offene Pendenz.",
+
+    "home.title": "Sunbite",
+    "home.sell": "Verkaufen",
+    "home.sales": "Verkäufe",
+    "home.menu": "Karte",
+    "home.operation": "Betrieb",
+    "home.settings": "Einstellungen",
+    "home.system": "System",
+    "home.login": "Anmelden",
   },
 };
 

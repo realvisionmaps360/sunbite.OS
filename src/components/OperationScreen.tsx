@@ -232,14 +232,16 @@ function OperationBody({
 
   return (
     <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <header className="flex items-center justify-between bg-brand px-4 py-3 text-cream">
-        <h1 className="font-display text-2xl">{t("operation.title")}</h1>
-        <div className="flex items-center gap-2">
-          <LangToggle />
-          <button onClick={onClose} className="px-3 py-1 text-3xl leading-none">
-            ×
-          </button>
-        </div>
+      <header className="flex items-center gap-3 bg-brand px-3 py-3 text-cream">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1 rounded-lg px-2 py-2 text-lg font-semibold"
+        >
+          <span className="text-2xl leading-none">‹</span>
+          {t("nav.home")}
+        </button>
+        <h1 className="flex-1 truncate text-center font-display text-2xl">{t("operation.title")}</h1>
+        <LangToggle />
       </header>
 
       {!navigator.onLine && (
@@ -264,12 +266,12 @@ function OperationBody({
 
       {!loading && operation && (
         <>
-          <nav className="flex gap-1 bg-brand px-3 pb-3">
+          <nav className="grid grid-cols-2 gap-2 bg-brand px-3 pb-3">
             {PHASES.map((p) => (
               <button
                 key={p}
                 onClick={() => setTab(p)}
-                className={`flex-1 rounded-full px-2 py-2 text-xs font-semibold transition ${
+                className={`min-w-0 truncate rounded-full px-2 py-2 text-sm font-semibold transition ${
                   tab === p ? "bg-cream text-brand-dark" : "bg-black/20 text-cream"
                 }`}
               >
