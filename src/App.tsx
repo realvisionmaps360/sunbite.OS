@@ -12,8 +12,11 @@ import { Valor } from "./components/Valor";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   EquipmentScreen,
+  FinanceScreen,
   LoginScreen,
   OperationScreen,
+  PricesScreen,
+  PurchasesScreen,
   StockScreen,
   SuppliersScreen,
 } from "./components/adminScreens";
@@ -23,6 +26,7 @@ import { LangToggle, useLang } from "./i18n";
 import { logEvent } from "./log";
 import { getCachedOpenOperationId, refreshOpenOperationId } from "./operations";
 import { useOrder } from "./order";
+import { refreshPrices } from "./prices";
 import { loadConfig, syncNow } from "./sync";
 import { useSwipe } from "./useSwipe";
 import type { Payment, Sale } from "./types";
@@ -46,7 +50,10 @@ export type Screen =
   | "operation"
   | "equipment"
   | "suppliers"
-  | "stock";
+  | "stock"
+  | "purchases"
+  | "finance"
+  | "prices";
 
 function stamp() {
   const d = new Date();
@@ -84,6 +91,7 @@ export default function App() {
   useEffect(() => {
     const attempt = async () => {
       void refreshOpenOperationId();
+      void refreshPrices();
       const r = await syncNow();
       if (r.ok) {
         if (r.sent > 0) void refreshPending();
@@ -151,6 +159,9 @@ export default function App() {
       case "equipment":
       case "suppliers":
       case "stock":
+      case "purchases":
+      case "finance":
+      case "prices":
         setScreen("home");
         return;
       case "sale":
@@ -364,6 +375,7 @@ export default function App() {
           onClose={voltarHome}
           onDataChanged={refreshPending}
           onOpenSystem={() => setScreen("system")}
+          onOpenPrices={() => setScreen("prices")}
         />
       )}
 
@@ -489,6 +501,69 @@ export default function App() {
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
             <StockScreen onClose={voltarHome} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {screen === "purchases" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
+                  ×
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("purchases.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <PurchasesScreen onClose={voltarHome} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {screen === "finance" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
+                  ×
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("finance.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <FinanceScreen onClose={voltarHome} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {screen === "prices" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
+                  ×
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("prices.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <PricesScreen onClose={voltarHome} />
           </Suspense>
         </ErrorBoundary>
       )}

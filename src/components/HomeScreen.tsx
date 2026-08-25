@@ -17,6 +17,8 @@ const TILES: Tile[] = [
   { emoji: "🔧", labelKey: "home.equipment", screen: "equipment" },
   { emoji: "🏭", labelKey: "home.suppliers", screen: "suppliers" },
   { emoji: "📦", labelKey: "home.stock", screen: "stock" },
+  { emoji: "🛒", labelKey: "home.purchases", screen: "purchases" },
+  { emoji: "💰", labelKey: "home.finance", screen: "finance" },
   { emoji: "⚙️", labelKey: "home.settings", screen: "settings" },
   { emoji: "🛠️", labelKey: "home.system", screen: "system" },
   { emoji: "👤", labelKey: "home.login", screen: "login", wide: true },

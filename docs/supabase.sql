@@ -771,6 +771,14 @@ drop policy if exists prices_update_auth on public.prices;
 create policy prices_update_auth
   on public.prices for update to authenticated using (true) with check (true);
 
+-- Leitura tambem para anon: preco nao e dado sensivel (e o que ja esta
+-- impresso no cardapio), e o caminho da venda precisa ler sem depender de
+-- login (src/prices.ts, mesmo principio de operations.ts). Nada a esconder
+-- aqui, ao contrario de cash_initial/cash_final em operations.
+drop policy if exists prices_select_anon on public.prices;
+create policy prices_select_anon
+  on public.prices for select to anon using (true);
+
 drop policy if exists price_history_select_auth on public.price_history;
 create policy price_history_select_auth
   on public.price_history for select to authenticated using (true);

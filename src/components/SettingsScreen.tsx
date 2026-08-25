@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
-import { CUP_PRICE, TOPPING_PRICE, money } from "../config";
+import { money } from "../config";
 import { allSales, deleteToday, deviceId, today } from "../db";
 import { LangToggle, useLang } from "../i18n";
+import { getCupPrice, getToppingPrice } from "../prices";
 import { loadConfig, saveConfig, syncNow } from "../sync";
 
 export function SettingsScreen({
   onClose,
   onDataChanged,
   onOpenSystem,
+  onOpenPrices,
 }: {
   onClose: () => void;
   onDataChanged: () => void;
   onOpenSystem: () => void;
+  onOpenPrices: () => void;
 }) {
   const { t } = useLang();
   const cfg = loadConfig();
@@ -76,12 +79,17 @@ export function SettingsScreen({
           <h2 className="font-display text-xl">{t("settings.prices")}</h2>
           <p className="text-ink-muted">
             {t("settings.priceLine", {
-              cup: money(CUP_PRICE),
-              topping: money(TOPPING_PRICE),
-              both: money(CUP_PRICE + TOPPING_PRICE),
+              cup: money(getCupPrice()),
+              topping: money(getToppingPrice()),
+              both: money(getCupPrice() + getToppingPrice()),
             })}
           </p>
-          <p className="mt-1 text-sm text-ink-muted">{t("settings.priceHint")}</p>
+          <button
+            onClick={onOpenPrices}
+            className="mt-2 w-full rounded-lg border border-black/20 py-3 font-semibold"
+          >
+            {t("settings.priceHint")}
+          </button>
         </section>
 
         <section>

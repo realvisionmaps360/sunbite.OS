@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useReducer } from "react";
-import { CUP_PRICE, TOPPING_PRICE } from "./config";
+import { getCupPrice, getToppingPrice } from "./prices";
 import type { Cup, OrderAction, ToppingId } from "./types";
 
 export function cupTotal(cup: Cup) {
-  return CUP_PRICE + cup.toppings.length * TOPPING_PRICE;
+  return getCupPrice() + cup.toppings.length * getToppingPrice();
 }
 
 export function orderTotal(cups: Cup[]) {

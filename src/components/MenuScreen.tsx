@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
-import { CUP_PRICE, TOPPING_PRICE, TOPPINGS, money } from "../config";
+import { TOPPINGS, money } from "../config";
 import { LangToggle, useLang } from "../i18n";
+import { getCupPrice, getToppingPrice } from "../prices";
 import { useSwipe } from "../useSwipe";
 
 /**
@@ -9,11 +10,13 @@ import { useSwipe } from "../useSwipe";
  * Dois usos: consulta rapida e mostrar ao cliente que pergunta o preco — por
  * isso e grande e limpo, nao uma tabela de configuracao.
  *
- * Todo preco sai de config.ts. Nenhum numero digitado a mao aqui: mudou la,
- * muda aqui, e nunca ha dois precos discordando.
+ * Preco vem de prices.ts (Etapa 7, DEC-2026-005) — o mesmo numero que o
+ * pedido usa. Nenhum numero digitado a mao aqui: mudou no banco, muda aqui.
  */
 export function MenuScreen({ onClose }: { onClose: () => void }) {
   const { t } = useLang();
+  const cupPrice = getCupPrice();
+  const toppingPrice = getToppingPrice();
 
   // Veio da direita: para dispensar, empurra de volta para a direita.
   useSwipe({ onDireita: onClose });
@@ -26,7 +29,7 @@ export function MenuScreen({ onClose }: { onClose: () => void }) {
       n === 0
         ? t("menu.combo0")
         : t(n === TOPPINGS.length ? "menu.comboAll" : "menu.comboN", { n }),
-    preco: CUP_PRICE + n * TOPPING_PRICE,
+    preco: cupPrice + n * toppingPrice,
   }));
 
   return (
@@ -58,7 +61,7 @@ export function MenuScreen({ onClose }: { onClose: () => void }) {
           </h2>
           <p className="mt-2 text-ink-muted">{t("menu.cupDesc")}</p>
           <p className="mt-4 font-display text-6xl tabular-nums text-brand">
-            {money(CUP_PRICE)}
+            {money(cupPrice)}
           </p>
         </section>
 
@@ -78,7 +81,7 @@ export function MenuScreen({ onClose }: { onClose: () => void }) {
                   {t(`topping.${x.id}`)}
                 </span>
                 <span className="tabular-nums text-xl font-semibold text-brand">
-                  + {money(TOPPING_PRICE)}
+                  + {money(toppingPrice)}
                 </span>
               </li>
             ))}
