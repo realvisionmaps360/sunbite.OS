@@ -1036,3 +1036,120 @@ on conflict (place_id, starts_at) do nothing;
 insert into public.pendencies (description, critical, status, origin) values
   ('Confirmar local da venda de 15.08.2026', false, 'aberta', 'seed')
 on conflict (description) where origin = 'seed' do nothing;
+
+
+-- ============================================================================
+-- Etapa 9 do plano de execucao — Entrada por conversa com IA
+-- Ver 02-Projetos/sunbite-ops/plano-etapa-9.md
+--
+-- A IA NAO escreve nas tabelas de negocio. Ela so grava propostas aqui, em
+-- ai_suggestions, com status 'pending'. Quem aplica na tabela real e o app,
+-- no clique de "Aprovar" do Felipe — mesmo padrao do VisionFlow
+-- (client_pending_updates). Card rejeitado nunca vira dado.
+--
+-- Isto e a excecao deliberada a DEC-2026-004 ("sem confirmacoes em lugar
+-- nenhum"): e o unico lugar do app onde quem escreve nao e uma pessoa, e
+-- sim a interpretacao de uma frase. O resto do app segue sem confirmacao.
+--
+-- ai_messages guarda o que foi dito e o que a IA entendeu — e o log que o
+-- plano exige, e o que permite responder "por que ela gravou isso".
+-- ============================================================================
+
+create table if not exists public.ai_messages (
+  id           uuid primary key default gen_random_uuid(),
+  input_text   text not null,
+  input_mode   text not null default 'text'
+               check (input_mode in ('text', 'voice')),
+  model        text,
+  raw_response jsonb,
+  error        text,
+  created_by   uuid references public.profiles(id),
+  device_id    uuid references public.devices(id),
+  created_at   timestamptz not null default now()
+);
+
+alter table public.ai_messages enable row level security;
+
+-- target_table nao e FK nem enum do Postgres de proposito: a lista branca
+-- de verdade vive na Edge Function (ALLOWED_FIELDS), que e quem sanitiza o
+-- payload antes de gravar. O check aqui e a segunda barreira, nao a
+-- primeira — se as duas discordarem, a insercao falha em vez de gravar
+-- numa tabela que o app nao sabe aplicar.
+create table if not exists public.ai_suggestions (
+  id           uuid primary key default gen_random_uuid(),
+  message_id   uuid not null references public.ai_messages(id) on delete cascade,
+  target_table text not null
+               check (target_table in (
+                 'stock_movements', 'purchases', 'expenses', 'pendencies',
+                 'equipment', 'suppliers', 'prices', 'places', 'events'
+               )),
+  operation    text not null default 'insert'
+               check (operation in ('insert', 'update')),
+  summary      text not null,
+  payload      jsonb not null default '{}'::jsonb,
+  uncertain    boolean not null default false,
+  status       text not null default 'pending'
+               check (status in ('pending', 'applied', 'rejected')),
+  applied_id   uuid,
+  created_by   uuid references public.profiles(id),
+  created_at   timestamptz not null default now(),
+  decided_at   timestamptz
+);
+
+alter table public.ai_suggestions enable row level security;
+
+create index if not exists ai_suggestions_pending_idx
+  on public.ai_suggestions (created_at desc)
+  where status = 'pending';
+
+create index if not exists ai_suggestions_message_idx
+  on public.ai_suggestions (message_id);
+
+
+-- ── Policies ─────────────────────────────────────────────────────────────
+-- Modulo administrativo: so authenticated, mesmo padrao das etapas 6/7/8.
+-- anon nao le nem escreve nada aqui — a tela de IA exige sessao.
+--
+-- Sem policy de delete: proposta rejeitada vira status 'rejected' e fica.
+-- O rastro do que a IA sugeriu e nao foi aceito e justamente o que permite
+-- corrigir o prompt depois.
+
+drop policy if exists ai_messages_select on public.ai_messages;
+create policy ai_messages_select on public.ai_messages
+  for select to authenticated using (true);
+
+drop policy if exists ai_messages_insert on public.ai_messages;
+create policy ai_messages_insert on public.ai_messages
+  for insert to authenticated with check (true);
+
+drop policy if exists ai_suggestions_select on public.ai_suggestions;
+create policy ai_suggestions_select on public.ai_suggestions
+  for select to authenticated using (true);
+
+drop policy if exists ai_suggestions_insert on public.ai_suggestions;
+create policy ai_suggestions_insert on public.ai_suggestions
+  for insert to authenticated with check (true);
+
+-- Update so para decidir (aprovar/rejeitar). O payload continua editavel
+-- porque o Felipe pode corrigir um campo antes de aprovar — mesmo que o
+-- VisionFlow ja faz em approve(id, editedPayload).
+drop policy if exists ai_suggestions_update on public.ai_suggestions;
+create policy ai_suggestions_update on public.ai_suggestions
+  for update to authenticated using (true) with check (true);
+
+
+-- ── Limpeza ──────────────────────────────────────────────────────────────
+-- Proposta pendente que ninguem decidiu em 30 dias nao e mais proposta, e
+-- lixo: o contexto da frase que a gerou ja se perdeu. Mesma poda de 30 dias
+-- que o log local da Etapa 5 faz.
+create or replace function public.prune_ai_suggestions()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.ai_suggestions
+     set status = 'rejected', decided_at = now()
+   where status = 'pending'
+     and created_at < now() - interval '30 days';
+$$;

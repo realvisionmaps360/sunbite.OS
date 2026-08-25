@@ -25,3 +25,6 @@ dist-ssr
 
 .vercel
 .env*
+
+# Cache do CLI do Supabase — nao e codigo, muda sozinho.
+supabase/.temp/

@@ -11,6 +11,7 @@ import { SaleConfirmation, type Confirmation } from "./components/SaleConfirmati
 import { Valor } from "./components/Valor";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
+  AIScreen,
   EquipmentScreen,
   FinanceScreen,
   LoginScreen,
@@ -55,7 +56,8 @@ export type Screen =
   | "purchases"
   | "finance"
   | "prices"
-  | "places";
+  | "places"
+  | "ai";
 
 function stamp() {
   const d = new Date();
@@ -165,6 +167,7 @@ export default function App() {
       case "finance":
       case "prices":
       case "places":
+      case "ai":
         setScreen("home");
         return;
       case "sale":
@@ -588,6 +591,27 @@ export default function App() {
         >
           <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
             <PlacesScreen onClose={voltarHome} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {screen === "ai" && (
+        <ErrorBoundary
+          fallback={
+            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
+                  x
+                </button>
+              </header>
+              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+                {t("ai.loadError")}
+              </p>
+            </div>
+          }
+        >
+          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
+            <AIScreen onClose={voltarHome} />
           </Suspense>
         </ErrorBoundary>
       )}

@@ -18,3 +18,4 @@ export const PurchasesScreen = lazy(() => import("./PurchasesScreen"));
 export const FinanceScreen = lazy(() => import("./FinanceScreen"));
 export const PricesScreen = lazy(() => import("./PricesScreen"));
 export const PlacesScreen = lazy(() => import("./PlacesScreen"));
+export const AIScreen = lazy(() => import("./AIScreen"));
