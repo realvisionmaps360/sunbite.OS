@@ -17,6 +17,8 @@ export interface Sale {
   payment: Payment;
   device_id: string;
   synced: boolean;
+  /** Operacao aberta no momento da venda (Etapa 6). Nulo se nenhuma. */
+  operation_id?: string | null;
 
   /**
    * Venda cancelada sai de todos os totais mas nao some da lista.

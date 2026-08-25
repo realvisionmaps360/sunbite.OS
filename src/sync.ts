@@ -47,6 +47,7 @@ function row(s: Sale) {
     total: s.total,
     payment: s.payment,
     device_id: s.device_id,
+    operation_id: s.operation_id ?? null,
     cancelled: s.cancelled ?? false,
     cancelled_at: s.cancelled_at ?? null,
   };

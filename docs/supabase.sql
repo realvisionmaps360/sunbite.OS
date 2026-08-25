@@ -523,3 +523,146 @@ begin
     alter publication supabase_realtime add table public.pendencies;
   end if;
 end $$;
+
+
+-- ============================================================================
+-- Etapa 6 do plano de execucao — Operacao, checklist e tempo real
+-- Ver 02-Projetos/sunbite-ops/plano-execucao.md
+--
+-- operations/checklist_templates/checklist_state/pendencies sao modulo
+-- administrativo: leitura e escrita completas exigem `authenticated` (Felipe
+-- e Romana, login permanente desde a Etapa 4). Excecao proposital: o
+-- fluxo de venda precisa saber a operacao aberta sem depender de login, entao
+-- `anon` ganha leitura das colunas nao sensiveis, so da operacao aberta.
+--
+-- Sem "for all": apagar continua sendo ninguem, mesma regra de `sales`.
+-- ============================================================================
+
+-- profiles precisa de policy propria: e para onde apontam opened_by/
+-- checked_by/created_by das quatro tabelas abaixo — sem isso nada delas
+-- consegue gravar quem fez.
+drop policy if exists profiles_select_auth on public.profiles;
+create policy profiles_select_auth
+  on public.profiles for select to authenticated using (true);
+
+drop policy if exists profiles_insert_self on public.profiles;
+create policy profiles_insert_self
+  on public.profiles for insert to authenticated with check (id = auth.uid());
+
+drop policy if exists profiles_update_self on public.profiles;
+create policy profiles_update_self
+  on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+
+-- operations
+drop policy if exists operations_select_auth on public.operations;
+create policy operations_select_auth
+  on public.operations for select to authenticated using (true);
+
+drop policy if exists operations_insert_auth on public.operations;
+create policy operations_insert_auth
+  on public.operations for insert to authenticated with check (true);
+
+drop policy if exists operations_update_auth on public.operations;
+create policy operations_update_auth
+  on public.operations for update to authenticated using (true) with check (true);
+
+-- Leitura minima para anon: so a operacao aberta, e so as colunas que o
+-- caminho da venda precisa para carimbar `sales.operation_id` offline.
+-- cash_initial/cash_final/opened_by/closed_by continuam invisiveis a quem
+-- nao esta logado — mesmo principio que ja fechou `sales` na Etapa 2.
+drop policy if exists operations_read_open_anon on public.operations;
+create policy operations_read_open_anon
+  on public.operations for select to anon using (status = 'open');
+
+revoke select on public.operations from anon;
+grant select (id, status, local_date, place_id, event_id) on public.operations to anon;
+
+-- checklist_templates
+drop policy if exists checklist_templates_select_auth on public.checklist_templates;
+create policy checklist_templates_select_auth
+  on public.checklist_templates for select to authenticated using (true);
+
+drop policy if exists checklist_templates_insert_auth on public.checklist_templates;
+create policy checklist_templates_insert_auth
+  on public.checklist_templates for insert to authenticated with check (true);
+
+drop policy if exists checklist_templates_update_auth on public.checklist_templates;
+create policy checklist_templates_update_auth
+  on public.checklist_templates for update to authenticated using (true) with check (true);
+
+-- checklist_state
+drop policy if exists checklist_state_select_auth on public.checklist_state;
+create policy checklist_state_select_auth
+  on public.checklist_state for select to authenticated using (true);
+
+drop policy if exists checklist_state_insert_auth on public.checklist_state;
+create policy checklist_state_insert_auth
+  on public.checklist_state for insert to authenticated with check (true);
+
+drop policy if exists checklist_state_update_auth on public.checklist_state;
+create policy checklist_state_update_auth
+  on public.checklist_state for update to authenticated using (true) with check (true);
+
+-- pendencies
+drop policy if exists pendencies_select_auth on public.pendencies;
+create policy pendencies_select_auth
+  on public.pendencies for select to authenticated using (true);
+
+drop policy if exists pendencies_insert_auth on public.pendencies;
+create policy pendencies_insert_auth
+  on public.pendencies for insert to authenticated with check (true);
+
+drop policy if exists pendencies_update_auth on public.pendencies;
+create policy pendencies_update_auth
+  on public.pendencies for update to authenticated using (true) with check (true);
+
+
+-- ── Seed do checklist ────────────────────────────────────────────────────
+-- Mesclado do PRD (secao 5) e do documento-base 05 (secoes 3, 10, 12, 21, 33).
+-- Tudo editavel pelo app depois — isto e so o ponto de partida. Indice unico
+-- por (phase, label_pt) evita duplicar ao rodar este arquivo de novo.
+create unique index if not exists checklist_templates_phase_label_pt_idx
+  on public.checklist_templates (phase, label_pt);
+
+insert into public.checklist_templates (phase, label_pt, label_de, critical, sort_order) values
+  ('preparacao', 'Caixa vermelha', 'Roter Kasten', false, 10),
+  ('preparacao', 'Dinheiro contado dentro da caixa', 'Geld in der Kasse gezählt', false, 20),
+  ('preparacao', 'Duas colheres de chocolate', 'Zwei Schokoladenlöffel', false, 30),
+  ('preparacao', 'Dois recipientes para chocolate', 'Zwei Schokoladenbehälter', false, 40),
+  ('preparacao', 'Duas tampas dos recipientes', 'Zwei Behälterdeckel', false, 50),
+  ('preparacao', 'Tripé para celular', 'Stativ fürs Handy', false, 60),
+  ('preparacao', 'Carregador do celular', 'Handy-Ladegerät', false, 70),
+  ('preparacao', 'Celular carregado', 'Handy aufgeladen', false, 80),
+  ('preparacao', 'Luvas pretas', 'Schwarze Handschuhe', false, 90),
+  ('preparacao', 'Sacos de lixo', 'Müllsäcke', false, 100),
+  ('preparacao', 'Caixa de som', 'Lautsprecher', false, 110),
+  ('preparacao', 'Caixa de som carregada', 'Lautsprecher aufgeladen', false, 120),
+  ('preparacao', 'Bateria da geladeira carregada', 'Kühlschrank-Batterie aufgeladen', false, 130),
+  ('preparacao', 'Bateria do motor carregada', 'Motor-Batterie aufgeladen', false, 140),
+  ('preparacao', 'Pacotes de gelo', 'Eispackungen', false, 150),
+  ('preparacao', 'Gelo no congelador na véspera', 'Eis am Vortag ins Gefrierfach gelegt', false, 160),
+  ('preparacao', 'Material/QR Code TWINT', 'TWINT-Material/QR-Code', false, 170),
+
+  ('saida', 'Local confirmado', 'Standort bestätigt', false, 10),
+  ('saida', 'Horário confirmado', 'Uhrzeit bestätigt', false, 20),
+  ('saida', 'Autorização verificada', 'Bewilligung geprüft', true, 30),
+  ('saida', 'Morangos', 'Erdbeeren', false, 40),
+  ('saida', 'Chocolate', 'Schokolade', false, 50),
+  ('saida', 'Toppings', 'Toppings', false, 60),
+  ('saida', 'Chantilly', 'Rahm', false, 70),
+  ('saida', 'Copos', 'Becher', false, 80),
+  ('saida', 'Freio', 'Bremse', true, 90),
+  ('saida', 'Bateria', 'Batterie', true, 100),
+
+  ('encerramento', 'Parar novos pedidos', 'Keine neuen Bestellungen mehr annehmen', false, 10),
+  ('encerramento', 'Contabilizar ingredientes restantes', 'Restliche Zutaten zählen', false, 20),
+  ('encerramento', 'Identificar produto descartável', 'Nicht mehr verwendbares Produkt identifizieren', false, 30),
+  ('encerramento', 'Guardar produto aproveitável de forma segura', 'Verwendbares Produkt sicher verstauen', false, 40),
+  ('encerramento', 'Fechar caixa', 'Kasse abschliessen', false, 50),
+  ('encerramento', 'Conferir TWINT', 'TWINT prüfen', false, 60),
+  ('encerramento', 'Desligar equipamentos', 'Geräte ausschalten', false, 70),
+  ('encerramento', 'Limpar superfícies', 'Flächen reinigen', false, 80),
+  ('encerramento', 'Desmontar materiais', 'Material abbauen', false, 90),
+  ('encerramento', 'Carregar equipamentos', 'Geräte einladen', false, 100),
+  ('encerramento', 'Verificar se nada ficou no local', 'Prüfen, dass nichts am Ort zurückbleibt', false, 110)
+on conflict (phase, label_pt) do nothing;

@@ -91,6 +91,26 @@ void (async () => {
   publish(stateFor(cached));
 })();
 
+/**
+ * Garante a propria linha em `profiles` — e para onde apontam opened_by/
+ * checked_by/created_by da Etapa 6, e sem ela essas colunas nunca conseguem
+ * gravar (a FK aponta para profiles, nao para auth.users). Melhor esforco:
+ * nunca bloqueia nem falha o login por causa disso.
+ */
+async function ensureOwnProfile(session: Session): Promise<void> {
+  try {
+    const supabase = await getSupabase();
+    await supabase
+      .from("profiles")
+      .upsert(
+        { id: session.user.id, name: (session.user.email ?? "Usuário").split("@")[0] },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
+  } catch {
+    // Sem rede, ou RLS ainda nao aplicado: tenta de novo no proximo login.
+  }
+}
+
 async function commitSession(session: Session): Promise<void> {
   const identity: Identity = {
     userId: session.user.id,
@@ -100,6 +120,7 @@ async function commitSession(session: Session): Promise<void> {
   writeLocalIdentity(identity);
   void setCache(IDENTITY_KEY, identity);
   publish({ kind: "ativo", identity });
+  void ensureOwnProfile(session);
   // So depois do primeiro login de verdade. Chamar de novo e inofensivo —
   // o navegador trata como idempotente.
   try {

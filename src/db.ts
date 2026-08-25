@@ -158,6 +158,35 @@ export async function deleteCache(key: string): Promise<void> {
   await (await db()).delete("cache", key);
 }
 
+export interface OutboxRow {
+  id: string;
+  table: string;
+  row: Record<string, unknown>;
+  onConflict?: string;
+  /** ISO, hora do aparelho — ordena o envio. */
+  createdAt: string;
+}
+
+/**
+ * Fila offline generica (Etapa 6) — store `outbox`, ja criado na Etapa 3.
+ * Mesma regra do cache: se `dbDegraded`, nao faz nada em silencio.
+ */
+export async function enqueueOutbox(row: OutboxRow): Promise<void> {
+  if (dbDegraded) return;
+  await (await db()).put("outbox", row);
+}
+
+export async function allOutbox(): Promise<OutboxRow[]> {
+  if (dbDegraded) return [];
+  const rows: OutboxRow[] = await (await db()).getAll("outbox");
+  return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export async function removeOutbox(id: string): Promise<void> {
+  if (dbDegraded) return;
+  await (await db()).delete("outbox", id);
+}
+
 export interface LogRow {
   id: string;
   /** ISO, relogio do aparelho — um evento offline guarda a hora real. */

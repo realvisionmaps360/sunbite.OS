@@ -10,5 +10,4 @@ import { lazy } from "react";
  * de forma estatica, sem arrastar peso nenhum para o caminho da venda.
  */
 export const LoginScreen = lazy(() => import("./LoginScreen"));
-
-// Etapa 6+: export const OperationScreen = lazy(() => import("./OperationScreen"));
+export const OperationScreen = lazy(() => import("./OperationScreen"));
