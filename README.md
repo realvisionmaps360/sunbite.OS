@@ -212,6 +212,66 @@ Essa e a **unica** confirmacao do app inteiro. Em qualquer outro lugar, velocida
 a protecao e desfazer depois, nunca perguntar antes. Aqui o dinheiro ja acabou de ser
 contado, e nao ha "depois".
 
+## Financeiro que se entende (Fatia 4 da V2)
+
+A tela responde "como foi hoje" antes de qualquer outra coisa, e explica cada numero em vez
+de assumir que quem le sabe contabilidade (PRD V2 §7.1).
+
+**Resultado de hoje** (§7.2): faturamento, Cash, TWINT, despesas e **resultado
+operacional** — faturamento menos despesas lancadas. Sai da linha de hoje de
+`v_finance_daily`, sem consulta nova.
+
+> **"Lucro liquido" nao aparece em lugar nenhum, e isso e deliberado.** O custo do morango e
+> do chocolate por copo ainda nao esta no sistema, entao esse numero mentiria. Quem for
+> tentado a acrescenta-lo: o que destrava a conta e a ficha do copo, na Fatia 5.
+
+**Caixa fisico** (§7.3) com a conta aberta linha por linha, e o TWINT sempre fora dela
+(§7.4). E a mesma conta do fechamento, e mora num lugar so:
+
+```
+src/cashbox.ts   — puro: nao importa ./supabase nem ./auth
+```
+
+Ela nasceu dentro de `OperationScreen.tsx`. Quando o Financeiro passou a mostrar a mesma
+conta, virou modulo: **duas copias da mesma formula e um jeito garantido de um dia elas
+discordarem**, e a que discorda e a que o dinheiro na mao vai contradizer. `Linha` (rotulo ×
+valor) foi junto para `ui.tsx` pelo mesmo motivo — a conta tem que se **parecer** igual nas
+duas telas, senao vira duas contas aos olhos de quem le.
+
+**O "?" ao lado do numero** e o componente `Explain` em `ui.tsx`, que abre um `Modal` com
+duas ou tres frases. O texto vem de `explain.<topico>.title` e `explain.<topico>.body` no
+`i18n.tsx`, **em PT e DE**. Sao seis: caixa, Cash × TWINT, despesa, retirada e ajuste,
+fechamento, resultado operacional.
+
+> **Nenhuma chave sem um "?" que a abra.** Foi escrito um texto so para "ajuste" e depois
+> removido: ajuste e retirada sao a mesma linha na tela, entao a chave ficaria inalcancavel.
+> Chave que ninguem alcanca e peso morto que envelhece.
+
+**Origem clara em cada lancamento** (§7.5). A tabela guarda tres tipos, mas o que se precisa
+ler na lista e de onde veio: compra, despesa, entrada, retirada, ajuste, movimento de caixa.
+Retirada e um `movimento_caixa` negativo e ajuste e o que o fechamento cria sozinho — antes
+os tres apareciam com o mesmo rotulo e a lista nao explicava nada.
+
+## Ver as telas que exigem login — `.preview/`
+
+Financeiro, Operacao e Compras so abrem com sessao no Supabase, que a maquina de quem
+desenvolve nao tem. `.preview/vite.config.ts` monta um Vite descartavel que troca
+`src/auth.ts`, `src/supabase.ts` e `src/main.tsx` por versoes de mentira **no momento de
+carregar** — nenhum arquivo de `src/` e alterado.
+
+```bash
+npx vite --config .preview/vite.config.ts
+# http://localhost:5233/?lang=de        alemao
+# http://localhost:5233/?lang=de&click=3  abre sozinho o quarto "?"
+```
+
+Os numeros sao o pior caso de largura de proposito: `CHF 1234.50` em todas as linhas.
+
+**Por que existe:** a tela de fechamento da Fatia 3 foi entregue sem nunca ter sido vista —
+o calculo foi conferido por sonda, e sonda nao mostra texto vazando nem numero encostando na
+borda. Dois defeitos da Fatia 4 so apareceram na imagem: `± CHF -312.50` com dois sinais na
+mesma linha, e um rotulo alemao empurrando o "?" para uma segunda linha sozinho.
+
 ## Como funciona offline
 
 A venda e gravada no **IndexedDB do celular** antes de qualquer coisa. Internet nunca
