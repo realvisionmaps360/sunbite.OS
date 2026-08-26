@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ensureFreshSession, useAuth, type Identity } from "../auth";
+import { expectedCash, rappen, type CashExpectation } from "../cashbox";
 import { today } from "../db";
 import { money } from "../config";
 import { useLang } from "../i18n";
 import { flushOutbox, queueWrite } from "../outbox";
-import { AdminHeader, TileButton } from "./ui";
+import { AdminHeader, Linha, TileButton } from "./ui";
 import {
   cacheOpenOperationView,
   phaseFor,
@@ -44,63 +45,6 @@ function googleCalendarUrl(ev: SunbiteEvent, lang: "pt" | "de", place: Place | n
 }
 
 const PHASES: Phase[] = ["preparacao", "saida", "operacao", "encerramento"];
-
-/**
- * Caixa esperado no fechamento (PRD 7.3):
- *
- *   inicial + vendas em dinheiro + entradas - despesas + movimentos de caixa
- *
- * TWINT fica fora de proposito (7.4): nao passa pela caixa fisica, entao
- * some do calculo e aparece so como informacao ao lado. "Retirada" nao tem
- * tipo proprio — e um `movimento_caixa` com valor negativo, por isso entra
- * somando.
- *
- * Este calculo vive aqui, e nao em operations.ts, porque precisa do cliente
- * autenticado: operations.ts e importado por App.tsx e nao pode arrastar
- * ./supabase para o pacote da venda.
- */
-interface CashExpectation {
-  initial: number;
-  cashSales: number;
-  twintSales: number;
-  entries: number;
-  costs: number;
-  movements: number;
-  expected: number;
-}
-
-function expectedCash(
-  operation: Operation,
-  sales: { total: number; payment: string; cancelled: boolean }[],
-  expenses: { type: string; value: number }[],
-): CashExpectation {
-  const ativas = sales.filter((s) => !s.cancelled);
-  const soma = (xs: { value: number }[]) => xs.reduce((a, x) => a + Number(x.value), 0);
-
-  const initial = Number(operation.cash_initial ?? 0);
-  const cashSales = ativas
-    .filter((s) => s.payment === "cash")
-    .reduce((a, s) => a + Number(s.total), 0);
-  const twintSales = ativas
-    .filter((s) => s.payment === "twint")
-    .reduce((a, s) => a + Number(s.total), 0);
-  const entries = soma(expenses.filter((e) => e.type === "entrada"));
-  const costs = soma(expenses.filter((e) => e.type === "despesa"));
-  const movements = soma(expenses.filter((e) => e.type === "movimento_caixa"));
-
-  return {
-    initial,
-    cashSales,
-    twintSales,
-    entries,
-    costs,
-    movements,
-    expected: initial + cashSales + entries - costs + movements,
-  };
-}
-
-/** Arredonda para o rappen antes de comparar — 0.1 + 0.2 nao pode travar o fechamento. */
-const rappen = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Tela de Operacao (Etapa 6) — exige sessao, por isso entra no barril
@@ -676,33 +620,6 @@ function OperationBody({
           onSaved={onOccurrenceSaved}
         />
       )}
-    </div>
-  );
-}
-
-/** Linha rotulo × valor do fechamento. Grade de duas colunas: o valor tem
- *  largura propria e nunca briga com o rotulo, mesmo em CHF 1234.50. */
-function Linha({
-  label,
-  value,
-  destaque,
-}: {
-  label: string;
-  value: string;
-  destaque?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className={`text-sm ${destaque ? "font-semibold text-red-800" : "text-ink-muted"}`}>
-        {label}
-      </span>
-      <span
-        className={`shrink-0 tabular-nums ${
-          destaque ? "font-semibold text-red-800" : "font-semibold"
-        }`}
-      >
-        {value}
-      </span>
     </div>
   );
 }
