@@ -1198,3 +1198,52 @@ grant update (total, payment, original_total, correction_reason, corrected_at)
 -- select local_date, local_time, original_total, total, payment,
 --        correction_reason, corrected_at
 --   from public.sales where corrected_at is not null order by corrected_at desc;
+
+
+-- ============================================================================
+-- Correcao: aparelho novo nao conseguia sincronizar nenhuma venda
+-- Achado em 2026-08-26, testando a Fatia 3.
+--
+-- O gatilho `log_sale_insert` (Etapa 5) grava em `activity_log`, que tem
+-- chave estrangeira para `devices`. Nada no aplicativo insere em `devices` —
+-- as linhas de la foram postas a mao. Consequencia: qualquer aparelho que o
+-- banco nao conheca (o celular da Romana, ou o do Felipe depois de limpar os
+-- dados do app, que gera um `sunbite.device_id` novo) recebe 23503 em TODA
+-- venda e nunca sincroniza. As vendas ficam guardadas no celular e nao ha
+-- nenhum aviso na tela — o app so mostra "a enviar".
+--
+-- Correcao: o proprio gatilho registra o aparelho na primeira venda. Ele ja
+-- roda com privilegio elevado (security definer), entao nao abre escrita
+-- nova para o anon: quem escreve continua sendo so o gatilho.
+-- ============================================================================
+
+create or replace function public.log_sale_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Aparelho se apresenta na primeira venda. `on conflict do nothing` mantem
+  -- first_seen_at do aparelho que ja existe.
+  insert into public.devices (id) values (new.device_id)
+  on conflict (id) do nothing;
+
+  update public.devices set last_seen_at = now() where id = new.device_id;
+
+  insert into public.activity_log (occurred_at, profile_id, device_id, action, message)
+  values (
+    new.created_at,   -- hora do aparelho, nao do servidor
+    null,              -- venda gravada por anon, sem sessao: nao ha "quem"
+    new.device_id,
+    'sale_insert',
+    'Venda de ' || new.cup_count || ' copo(s), CHF ' ||
+      to_char(new.total, 'FM999990.00') || ', via ' ||
+      case new.payment when 'cash' then 'dinheiro' else 'TWINT' end || '.'
+  );
+  return new;
+end;
+$$;
+
+-- Conferencia: depois de uma venda de um aparelho novo,
+-- select id, first_seen_at, last_seen_at from public.devices order by first_seen_at desc;
