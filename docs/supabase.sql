@@ -1247,3 +1247,152 @@ $$;
 
 -- Conferencia: depois de uma venda de um aparelho novo,
 -- select id, first_seen_at, last_seen_at from public.devices order by first_seen_at desc;
+
+
+-- ============================================================================
+-- Fatia 5 da V2 (primeira parte) — a ficha do copo e o estoque calculado
+-- Ver 02-Projetos/sunbite-ops/plano-v2.md (Fatia 5) e PRD V2 secao 8.
+--
+-- Copia rodavel, com os comentarios longos e a conferencia:
+--   02-Projetos/sunbite-ops/fatia-5-rodar-no-supabase.sql
+--
+-- ⚠️ Rodar ANTES de publicar. Nao quebra a venda (nada novo entra no insert
+-- de `sales`), mas sem isto a tela de Estoque abre sem os numeros novos.
+-- ============================================================================
+
+-- Chocolate deixa de ser medido em "pacote": a ficha fala em gramas, e
+-- "0,0132 pacote por copo" e um numero que ninguem confere olhando.
+update public.stock_items
+   set name                = 'Chocolate',
+       unit                = 'kg',
+       quantity            = quantity * 2.5,
+       low_stock_threshold = coalesce(low_stock_threshold, 1) * 2.5,
+       notes               = 'CHF 20 o pacote de 2,5 kg ≈ CHF 8/kg, valor de partida — a confirmar.',
+       updated_at          = now()
+ where name = 'Chocolate (pacote 2,5kg)';
+
+-- Colher e os quatro toppings existem no cardapio desde sempre e nunca
+-- existiram no estoque — entao o consumo deles nao tinha onde ser descontado.
+insert into public.stock_items (name, unit, quantity, low_stock_threshold, notes) values
+  ('Colher',          'unidade', 0, 100, 'Uma por copo.'),
+  ('Amendoa tostada', 'kg',      0, 0.5, 'Topping. 15 g por copo escolhido.'),
+  ('Coco tostado',    'kg',      0, 0.5, 'Topping. 15 g por copo escolhido.'),
+  ('Chantilly',       'kg',      0, 0.5, 'Topping. 15 g por copo escolhido.'),
+  ('Marshmallow',     'kg',      0, 0.5, 'Topping. 15 g por copo escolhido.')
+on conflict (name) do nothing;
+
+-- A ficha do copo. `applies_to` = 'cup' (sai em todo copo) ou o id do topping
+-- ('almond', 'coconut', 'cream', 'marshmallow'), que so sai quando escolhido.
+-- O id e o mesmo que a venda ja grava em `sales.cups` e nunca muda com o
+-- idioma — foi essa escolha, la no comeco, que permite derivar o consumo hoje
+-- sem tocar em nenhuma venda ja gravada.
+create table if not exists public.recipe (
+  stock_item_id uuid not null references public.stock_items(id) on delete cascade,
+  applies_to    text not null,
+  qty_per_cup   numeric(10,4) not null check (qty_per_cup > 0),
+  notes         text,
+  updated_at    timestamptz not null default now(),
+  primary key (stock_item_id, applies_to)
+);
+
+alter table public.recipe enable row level security;
+
+drop policy if exists recipe_select_auth on public.recipe;
+create policy recipe_select_auth
+  on public.recipe for select to authenticated using (true);
+drop policy if exists recipe_write_auth on public.recipe;
+create policy recipe_write_auth
+  on public.recipe for update to authenticated using (true) with check (true);
+
+revoke all on public.recipe from anon;
+
+insert into public.recipe (stock_item_id, applies_to, qty_per_cup, notes)
+select si.id, v.applies_to, v.qty, v.notes
+from (values
+  ('Morango',          'cup',          0.1560, '140 g liquido + 10% de perda na limpeza = 156 g bruto.'),
+  ('Chocolate',        'cup',          0.0330, '30 ml x 1,1 g/ml = 33 g.'),
+  ('Copo 300ml rPET',  'cup',          1.0000, 'Um por copo.'),
+  ('Colher',           'cup',          1.0000, 'Uma por copo.'),
+  ('Amendoa tostada',  'almond',       0.0150, '15 g, so quando escolhido.'),
+  ('Coco tostado',     'coconut',      0.0150, '15 g, so quando escolhido.'),
+  ('Chantilly',        'cream',        0.0150, '15 g, so quando escolhido.'),
+  ('Marshmallow',      'marshmallow',  0.0150, '15 g, so quando escolhido.')
+) as v(item_name, applies_to, qty, notes)
+join public.stock_items si on si.name = v.item_name
+on conflict (stock_item_id, applies_to) do update
+  set qty_per_cup = excluded.qty_per_cup,
+      notes       = excluded.notes,
+      updated_at  = now();
+
+-- O consumo sai da conta, nao de um registro. O app **nao** baixa estoque a
+-- cada venda, e isso e decisao: (1) gravar movimento exige sessao, e a venda
+-- nao pode depender de login — decisao 1; (2) venda que sincroniza duas vezes
+-- descontaria duas vezes. Aqui o banco deriva o consumo das vendas que ja
+-- subiram, e a conta se corrige sozinha quando uma venda offline sobe.
+create or replace view public.v_stock_consumption as
+with copo as (
+  select jsonb_array_elements(s.cups) as c
+  from public.sales s
+  where not s.cancelled
+),
+saida as (
+  select r.stock_item_id, r.qty_per_cup as qty
+  from copo
+  join public.recipe r on r.applies_to = 'cup'
+  union all
+  select r.stock_item_id, r.qty_per_cup
+  from copo
+  cross join lateral jsonb_array_elements_text(coalesce(copo.c -> 'toppings', '[]'::jsonb)) as tp(topping)
+  join public.recipe r on r.applies_to = tp.topping
+)
+select stock_item_id, sum(qty)::numeric(12,4) as consumido
+from saida
+group by stock_item_id;
+
+-- calculado = tudo que entrou (o total que apply_stock_movement ja mantem em
+-- stock_items.quantity) − consumo derivado das vendas.
+--
+-- Consequencia que precisa ficar escrita: o motivo **"uso"** deixa de servir
+-- para copo vendido. Baixar a mao o que a venda ja desconta faz a mesma coisa
+-- sair duas vezes. "uso" continua valendo para o que se gasta fora da venda:
+-- teste, degustacao, o que estragou.
+create or replace view public.v_stock_status as
+select
+  si.id,
+  si.name,
+  si.unit,
+  si.low_stock_threshold,
+  si.quantity                                    as entradas,
+  coalesce(c.consumido, 0)                       as consumido,
+  (si.quantity - coalesce(c.consumido, 0))::numeric(12,4) as calculado,
+  r.qty_per_cup                                  as por_copo,
+  case
+    when coalesce(r.qty_per_cup, 0) > 0
+    then floor((si.quantity - coalesce(c.consumido, 0)) / r.qty_per_cup)
+  end                                            as copos_restantes,
+  m.ultima_contagem
+from public.stock_items si
+left join public.v_stock_consumption c on c.stock_item_id = si.id
+left join public.recipe r
+       on r.stock_item_id = si.id and r.applies_to = 'cup'
+left join (
+  select stock_item_id, max(created_at) as ultima_contagem
+  from public.stock_movements
+  where reason = 'ajuste'
+  group by stock_item_id
+) m on m.stock_item_id = si.id;
+
+revoke all on public.v_stock_consumption from anon;
+revoke all on public.v_stock_status      from anon;
+grant select on public.v_stock_consumption to authenticated;
+grant select on public.v_stock_status      to authenticated;
+
+-- ⚠️ Achado de seguranca, ao escrever as views acima: `v_finance_daily`
+-- (Etapa 1) nunca teve grant explicito, entao herdou o privilegio padrao do
+-- schema public do Supabase — que inclui **anon**. View pertence ao dono e
+-- ignora o RLS das tabelas de baixo, entao quem tiver a chave anon (que viaja
+-- dentro do JavaScript do app) le o faturamento inteiro, dia a dia. Contradiz
+-- a razao pela qual o SELECT de `sales` foi mantido fechado. Fechar nao
+-- quebra a tela de Financeiro, que so abre logada.
+revoke all on public.v_finance_daily from anon;
+grant select on public.v_finance_daily to authenticated;

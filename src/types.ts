@@ -107,6 +107,32 @@ export interface StockMovement {
   created_at: string;
 }
 
+/**
+ * Uma linha da view `v_stock_status` (Fatia 5): o estoque de um item ja com a
+ * conta feita no banco.
+ *
+ *   calculado = entradas (o total dos movimentos) − consumido (derivado das
+ *               vendas que ja subiram, cruzando sales.cups com a ficha)
+ *
+ * `contado` nao existe aqui de proposito: contagem fisica nao e um campo que
+ * o app guarda, e um movimento de `ajuste` que ele grava. A diferenca vira
+ * historico em vez de sobrescrever o numero em silencio.
+ */
+export interface StockStatus {
+  id: string;
+  name: string;
+  unit: string;
+  low_stock_threshold: number | null;
+  entradas: number;
+  consumido: number;
+  calculado: number;
+  /** Quanto sai por copo vendido. Nulo para item que nao esta na ficha. */
+  por_copo: number | null;
+  /** Quantos copos o que sobrou ainda faz. Nulo quando `por_copo` e nulo. */
+  copos_restantes: number | null;
+  ultima_contagem: string | null;
+}
+
 export interface Purchase {
   id: string;
   supplier_id: string | null;

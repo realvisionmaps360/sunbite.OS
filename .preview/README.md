@@ -13,7 +13,8 @@ não mostra texto vazando nem número encostando na borda.
 npx vite --config .preview/vite.config.ts
 ```
 
-Depois: `http://localhost:5233/?lang=de` para o alemão, `&click=3` para abrir
+Depois: `http://localhost:5233/?lang=de` para o alemão, `&screen=stock` para o
+Estoque, `&click=3` para abrir
 sozinho o quarto "?" da tela e fotografar a caixinha do tutorial.
 
 Os números são o pior caso de largura de propósito: `CHF 1234.50` em todas as

@@ -279,6 +279,28 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "stock.reason.uso": "Uso",
     "stock.reason.ajuste": "Ajuste",
     "stock.reason.perda": "Perda",
+    "stock.calculated": "pela conta",
+    "stock.yield": "Dá para mais ou menos {cups} copos.",
+    "stock.noneLeft": "Pela conta, acabou. Falta lançar a compra ou contar o que tem.",
+    "stock.entries": "Tudo que entrou",
+    "stock.consumed": "Saiu nas vendas",
+    "stock.perCup": "Por copo",
+    "stock.lastCount": "Contado pela última vez em {date}.",
+    "stock.count": "Contei",
+    "stock.countedLabel": "Quanto tem de verdade ({unit})",
+    "stock.difference": "Diferença",
+    "stock.countSave": "Salvar contagem",
+    "stock.useNote":
+      "Uso é para o que se gastou fora da venda: teste, degustação, o que estragou. O copo vendido já sai sozinho.",
+    "explain.calculado.title": "O que é “pela conta”",
+    "explain.calculado.body":
+      "É o que deveria ter sobrado: tudo que você comprou, menos o que saiu nas vendas do dia. O app calcula sozinho a partir das vendas já enviadas — você não precisa dar baixa em nada depois de vender.",
+    "explain.consumoDerivado.title": "Como o app sabe o que saiu",
+    "explain.consumoDerivado.body":
+      "Cada copo vendido leva morango, chocolate, um copo e uma colher, e mais 15 g de cada topping que o cliente escolheu. O app multiplica isso pelas vendas. Venda cancelada não conta, e venda que ainda está no celular entra assim que subir.",
+    "explain.diferencaEstoque.title": "Por que sobra ou falta",
+    "explain.diferencaEstoque.body":
+      "A conta usa a receita certinha; a vida não. Um pouco a mais no copo, um morango que estragou, uma degustação — tudo isso aparece aqui. O app guarda a diferença com a data em vez de apagar o número antigo, para você ver se ela é sempre para o mesmo lado.",
 
     "purchases.title": "Compras",
     "purchases.loadError": "Não deu para abrir agora. Tente de novo com internet.",
@@ -708,6 +730,28 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "stock.reason.uso": "Verbrauch",
     "stock.reason.ajuste": "Korrektur",
     "stock.reason.perda": "Verlust",
+    "stock.calculated": "laut Rechnung",
+    "stock.yield": "Reicht für etwa {cups} Becher.",
+    "stock.noneLeft": "Laut Rechnung aufgebraucht. Einkauf erfassen oder zählen.",
+    "stock.entries": "Alles was reinkam",
+    "stock.consumed": "Ging in Verkäufe",
+    "stock.perCup": "Pro Becher",
+    "stock.lastCount": "Zuletzt gezählt am {date}.",
+    "stock.count": "Gezählt",
+    "stock.countedLabel": "Wie viel wirklich da ist ({unit})",
+    "stock.difference": "Differenz",
+    "stock.countSave": "Zählung speichern",
+    "stock.useNote":
+      "Verbrauch ist für alles ausserhalb des Verkaufs: Test, Degustation, Verdorbenes. Der verkaufte Becher geht von selbst ab.",
+    "explain.calculado.title": "Was „laut Rechnung“ heisst",
+    "explain.calculado.body":
+      "Das ist, was übrig sein sollte: alles Eingekaufte minus das, was in die Verkäufe ging. Die App rechnet es selbst aus den bereits übermittelten Verkäufen — du musst nach dem Verkauf nichts abbuchen.",
+    "explain.consumoDerivado.title": "Wie die App weiss, was rausging",
+    "explain.consumoDerivado.body":
+      "Jeder verkaufte Becher braucht Erdbeeren, Schokolade, einen Becher und einen Löffel, plus 15 g von jedem gewählten Topping. Die App multipliziert das mit den Verkäufen. Stornierte Verkäufe zählen nicht, und ein Verkauf, der noch im Handy liegt, kommt dazu, sobald er hochgeht.",
+    "explain.diferencaEstoque.title": "Warum es mehr oder weniger ist",
+    "explain.diferencaEstoque.body":
+      "Die Rechnung nimmt das Rezept genau; das Leben nicht. Etwas mehr im Becher, eine verdorbene Erdbeere, eine Degustation — all das taucht hier auf. Die App hält die Differenz mit Datum fest, statt die alte Zahl zu überschreiben, damit du siehst, ob sie immer in dieselbe Richtung geht.",
 
     "purchases.title": "Einkäufe",
     "purchases.loadError": "Konnte jetzt nicht geöffnet werden. Mit Internet erneut versuchen.",

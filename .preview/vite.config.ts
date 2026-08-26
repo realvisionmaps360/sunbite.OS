@@ -1,5 +1,5 @@
 /**
- * Config descartavel so para VER a tela de Financeiro (Fatia 4).
+ * Config descartavel so para VER telas que exigem login (Financeiro, Estoque).
  *
  * A tela exige sessao no Supabase, que nao existe na maquina de quem
  * desenvolve. Em vez de conferir o calculo "por sonda" — que foi o que
@@ -41,6 +41,16 @@ const ROWS = {
     { total: 1234.5, payment: "twint", cancelled: false },
     { total: 99, payment: "cash", cancelled: true },
   ],
+  // Fatia 5. Os numeros saem do teste em Postgres de verdade (PGlite), mais
+  // dois casos que a tela precisa saber mostrar: item fora da ficha, e item
+  // que ficou negativo por nunca ter tido compra lancada.
+  v_stock_status: [
+    { id: "s1", name: "Morango", unit: "kg", low_stock_threshold: 2, entradas: 1234.5, consumido: 1.872, calculado: 1232.628, por_copo: 0.156, copos_restantes: 7901, ultima_contagem: "2026-08-25T18:00:00Z" },
+    { id: "s2", name: "Chocolate", unit: "kg", low_stock_threshold: 2.5, entradas: 10, consumido: 0.396, calculado: 9.604, por_copo: 0.033, copos_restantes: 291, ultima_contagem: null },
+    { id: "s3", name: "Copo 300ml rPET", unit: "unidade", low_stock_threshold: 100, entradas: 0, consumido: 12, calculado: -12, por_copo: 1, copos_restantes: -12, ultima_contagem: null },
+    { id: "s4", name: "Amendoa tostada", unit: "kg", low_stock_threshold: 0.5, entradas: 1, consumido: 0.165, calculado: 0.835, por_copo: null, copos_restantes: null, ultima_contagem: null },
+  ],
+  stock_items: [],
 };
 
 const MOCK_SUPABASE = `
@@ -66,23 +76,40 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import FinanceScreen from "./components/FinanceScreen.tsx";
+import StockScreen from "./components/StockScreen.tsx";
 import { LangProvider } from "./i18n.tsx";
 
-// Abre direto no Financeiro, no idioma do ?lang= — o unico jeito de fotografar
-// a tela sem sessao no Supabase. Nada disto existe no app real.
-const lang = new URLSearchParams(location.search).get("lang");
+// Abre direto na tela do ?screen=, no idioma do ?lang= — o unico jeito de
+// fotografar sem sessao no Supabase. Nada disto existe no app real.
+const params = new URLSearchParams(location.search);
+const lang = params.get("lang");
 if (lang === "de" || lang === "pt") localStorage.setItem("sunbite.lang", lang);
+const Tela = params.get("screen") === "stock" ? StockScreen : FinanceScreen;
 
 // ?click=N abre sozinho o N-esimo "?" da tela, para fotografar a caixinha
 // do tutorial sem um dedo humano.
-const click = Number(new URLSearchParams(location.search).get("click") ?? -1);
+const click = Number(params.get("click") ?? -1);
 if (click >= 0) setTimeout(() => [...document.querySelectorAll("button")].filter((b) => b.textContent.trim() === "?")[click]?.click(), 800);
 
+
+// ?count=N&val=X abre a contagem do N-esimo item e digita X, para fotografar
+// a linha da diferenca sem um dedo humano.
+const count = Number(params.get("count") ?? -1);
+if (count >= 0) setTimeout(() => {
+  const bs = [...document.querySelectorAll("button")].filter((b) => /Contei|Gez/.test(b.innerText));
+  bs[count]?.click();
+  setTimeout(() => {
+    const inp = document.querySelector("input[type=number]");
+    if (!inp) return;
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(inp, params.get("val") ?? "0");
+    inp.dispatchEvent(new Event("input", { bubbles: true }));
+  }, 200);
+}, 700);
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <LangProvider>
-      <FinanceScreen onClose={() => {}} />
+      <Tela onClose={() => {}} />
     </LangProvider>
   </StrictMode>,
 );
