@@ -65,7 +65,7 @@ export default function LoginScreen({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setEmail(e.target.value)}
                 autoCapitalize="off"
                 autoComplete="username"
-                className="mb-3 w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                className="mb-3 w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
               />
 
               <label className="block text-sm font-semibold">{t("auth.password")}</label>
@@ -74,7 +74,7 @@ export default function LoginScreen({ onClose }: { onClose: () => void }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                className="mb-3 w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                className="mb-3 w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
               />
 
               <button

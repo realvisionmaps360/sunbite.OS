@@ -311,7 +311,7 @@ function OperationBody({
 
           <div className="flex-1 space-y-4 p-4">
             {tab !== "operacao" && (
-              <ul className="divide-y divide-black/10 rounded-2xl bg-white">
+              <ul className="divide-y divide-black/10 rounded-2xl bg-cream">
                 {phaseTemplates.length === 0 && (
                   <li className="p-4 text-center text-ink-muted">{t("checklist.empty")}</li>
                 )}
@@ -346,12 +346,12 @@ function OperationBody({
             )}
 
             {tab === "saida" && (
-              <div className="space-y-2 rounded-2xl bg-white p-4">
+              <div className="space-y-2 rounded-2xl bg-cream p-4">
                 <label className="block text-sm font-semibold">{t("operation.place")}</label>
                 <select
                   value={operation.place_id ?? ""}
                   onChange={(e) => void linkPlaceEvent({ place_id: e.target.value || null })}
-                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                  className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
                 >
                   <option value="">{t("places.noPlace")}</option>
                   {places.map((pl) => (
@@ -365,7 +365,7 @@ function OperationBody({
                 <select
                   value={operation.event_id ?? ""}
                   onChange={(e) => void linkPlaceEvent({ event_id: e.target.value || null })}
-                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                  className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
                 >
                   <option value="">{t("operation.noEvent")}</option>
                   {events.map((ev) => (
@@ -403,7 +403,7 @@ function OperationBody({
                   inputMode="decimal"
                   value={cashInitial}
                   onChange={(e) => setCashInitial(e.target.value)}
-                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                  className="w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
                 />
                 <button
                   onClick={() => void openOperation()}
@@ -415,7 +415,7 @@ function OperationBody({
             )}
 
             {tab === "operacao" && (
-              <div className="space-y-3 rounded-2xl bg-white p-4">
+              <div className="space-y-3 rounded-2xl bg-cream p-4">
                 <h2 className="font-display text-xl">{t("operation.summary")}</h2>
                 {operation.opened_at && (
                   <p className="text-sm text-ink-muted">
@@ -445,7 +445,7 @@ function OperationBody({
                   inputMode="decimal"
                   value={cashFinal}
                   onChange={(e) => setCashFinal(e.target.value)}
-                  className="w-full rounded-lg border border-black/20 bg-white px-3 py-2"
+                  className="w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
                 />
                 <button
                   onClick={() => void closeOperation()}
@@ -463,7 +463,7 @@ function OperationBody({
                   value={newPendency}
                   onChange={(e) => setNewPendency(e.target.value)}
                   placeholder={t("pendency.placeholder")}
-                  className="flex-1 rounded-lg border border-black/20 bg-white px-3 py-2"
+                  className="flex-1 rounded-lg border border-black/20 bg-cream px-3 py-2"
                 />
                 <button
                   onClick={() => void addPendency()}
@@ -482,7 +482,7 @@ function OperationBody({
                 {t("pendency.critical")}
               </label>
 
-              <ul className="divide-y divide-black/10 rounded-2xl bg-white">
+              <ul className="divide-y divide-black/10 rounded-2xl bg-cream">
                 {pendencies.length === 0 && (
                   <li className="p-4 text-center text-ink-muted">{t("pendency.empty")}</li>
                 )}

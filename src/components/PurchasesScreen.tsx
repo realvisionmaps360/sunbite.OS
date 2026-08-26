@@ -168,7 +168,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
                     value={it.stock_item_id}
                     disabled={!online}
                     onChange={(e) => updateDraftItem(i, { stock_item_id: e.target.value })}
-                    className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm"
+                    className="flex-1 rounded-lg border border-black/10 bg-cream px-2 py-1 text-sm"
                   >
                     {stockItems.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -183,7 +183,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
                     disabled={!online}
                     onChange={(e) => updateDraftItem(i, { quantity: e.target.value })}
                     placeholder={t("purchases.quantity")}
-                    className="w-20 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm"
+                    className="w-20 rounded-lg border border-black/10 bg-cream px-2 py-1 text-sm"
                   />
                   <input
                     type="number"
@@ -192,7 +192,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
                     disabled={!online}
                     onChange={(e) => updateDraftItem(i, { unit_cost: e.target.value })}
                     placeholder={t("purchases.unitCost")}
-                    className="w-24 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm"
+                    className="w-24 rounded-lg border border-black/10 bg-cream px-2 py-1 text-sm"
                   />
                   <button onClick={() => removeDraftItem(i)} className="px-2 text-xl text-red-700">
                     ×
@@ -239,7 +239,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
                 {purchases.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between gap-2 rounded-2xl bg-white p-4 shadow-sm"
+                    className="flex items-center justify-between gap-2 rounded-2xl bg-cream p-4 shadow-sm"
                   >
                     <span className="text-sm">
                       {new Date(p.purchased_at).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")} ·{" "}

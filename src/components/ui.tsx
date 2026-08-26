@@ -11,6 +11,12 @@ import { LangToggle, useLang } from "../i18n";
  * so, para toda tela nova (ou redesenhada) puxar daqui em vez de reinventar.
  *
  * So usa os tokens de cor que ja existem em index.css — nenhuma cor nova.
+ *
+ * Hierarquia de fundo (V2, PRD 3.2). Cada camada precisa ser diferente da
+ * de baixo, senao o elemento some — foi o que aconteceu com os campos do
+ * login quando o `Card` virou creme:
+ *   pagina `bg-cream-soft` › `Card` `bg-cream` › campo dentro do Card `bg-cream-soft`
+ *   pagina `bg-cream-soft` › campo solto na pagina `bg-cream`
  */
 
 export function AdminHeader({ title, onClose }: { title: string; onClose: () => void }) {
@@ -28,12 +34,12 @@ export function AdminHeader({ title, onClose }: { title: string; onClose: () => 
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`space-y-3 rounded-2xl bg-white p-4 shadow-sm ${className}`}>{children}</div>;
+  return <div className={`space-y-3 rounded-2xl bg-cream p-4 shadow-sm ${className}`}>{children}</div>;
 }
 
 export function EmptyState({ emoji, text }: { emoji: string; text: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl bg-white p-8 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-2xl bg-cream p-8 text-center">
       <span className="text-4xl">{emoji}</span>
       <p className="text-ink-muted">{text}</p>
     </div>
