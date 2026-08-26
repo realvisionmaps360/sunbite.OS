@@ -32,7 +32,7 @@ export function MenuScreen({ onClose }: { onClose: () => void }) {
 
   return (
     <motion.div
-      className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream"
+      className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream"
       /* Entra pela direita: a animação dá direção à abertura e o × devolve
          para o mesmo lado. */
       initial={{ x: "100%" }}

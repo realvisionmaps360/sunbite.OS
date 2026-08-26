@@ -17,6 +17,29 @@ body,
   height: 100%;
 }
 
+/*
+ * Altura da barra de navegacao de baixo (V2), somada a area segura do
+ * aparelho. Um numero so: BottomNav.tsx reserva o espaco no fluxo normal e
+ * `.tela-sobreposta` o desconta das telas sobrepostas.
+ */
+:root {
+  --altura-barra: calc(3.125rem + env(safe-area-inset-bottom));
+}
+
+/*
+ * Telas que abrem por cima (Ajustes, Operacao, Estoque, e todas as
+ * administrativas) usam posicionamento fixo e por isso IGNORAM o padding do
+ * container — foi assim que a barra cobriu o botao "Sistema" no Ajustes.
+ * O espaco precisa sair da propria tela, e sai daqui.
+ *
+ * Nao vale para pagamento, conferencia e comemoracao: nessas a barra some,
+ * entao elas continuam ocupando a tela inteira.
+ */
+.tela-sobreposta {
+  position: fixed;
+  inset: 0 0 var(--altura-barra) 0;
+}
+
 body {
   margin: 0;
   background: var(--color-brand);

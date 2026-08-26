@@ -50,7 +50,7 @@ export function SalesScreen({
 
   return (
     <motion.div
-      className="fixed inset-0 z-20 flex flex-col bg-cream-soft"
+      className="tela-sobreposta z-20 flex flex-col bg-cream-soft"
       /* Entra pela esquerda: a animação dá direção à abertura e o × devolve
          para o mesmo lado. */
       initial={{ x: "-100%" }}

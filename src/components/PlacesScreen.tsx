@@ -122,7 +122,7 @@ function PlacesBody({ onClose }: { onClose: () => void }) {
   const placeName = (id: string | null) => places.find((p) => p.id === id)?.name ?? t("places.noPlace");
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("places.title")} onClose={onClose} />
 
       {!online && (

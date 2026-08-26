@@ -5,6 +5,7 @@ import { useLang } from "../i18n";
 import { flushOutbox, queueWrite } from "../outbox";
 import { AdminHeader } from "./ui";
 import {
+  cacheOpenOperationView,
   phaseFor,
   type ChecklistStateRow,
   type ChecklistTemplate,
@@ -131,6 +132,19 @@ function OperationBody({
       if (pl) setPlaces(pl as Place[]);
       const { data: ev } = await supabase.from("events").select("*").order("starts_at", { ascending: false });
       if (ev) setEvents(ev as SunbiteEvent[]);
+
+      // Deposita na vista da Home o que so daqui da para ler: `opened_at` e o
+      // nome do local ficam fora do que o anon enxerga (ver operations.ts).
+      // Sem isto a Home mostra "Operacao em andamento" sem local nem duracao.
+      if (current?.status === "open") {
+        const local = (pl as Place[] | null)?.find((p) => p.id === current.place_id);
+        void cacheOpenOperationView({
+          id: current.id,
+          local_date: current.local_date,
+          opened_at: current.opened_at,
+          place_name: local?.name ?? null,
+        });
+      }
     } catch {
       // Offline ou sem sessao valida: fica com o que ja tem no estado local.
     } finally {
@@ -270,7 +284,7 @@ function OperationBody({
   const stateByTemplate = new Map(states.map((s) => [s.template_id, s]));
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("operation.title")} onClose={onClose} />
 
       {!navigator.onLine && (

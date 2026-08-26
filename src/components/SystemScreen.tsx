@@ -40,7 +40,7 @@ export default function SystemScreen({ onClose }: { onClose: () => void }) {
   }, [load]);
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col bg-cream-soft">
       <AdminHeader title={t("system.title")} onClose={onClose} />
 
       <nav className="flex gap-1 bg-brand px-3 pb-3">

@@ -90,7 +90,7 @@ function EquipmentBody({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("equipment.title")} onClose={onClose} />
 
       {!online && (

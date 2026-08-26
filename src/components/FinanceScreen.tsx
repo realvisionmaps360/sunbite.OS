@@ -114,7 +114,7 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("finance.title")} onClose={onClose} />
 
       {!online && (

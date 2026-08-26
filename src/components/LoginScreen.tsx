@@ -29,7 +29,7 @@ export default function LoginScreen({ onClose }: { onClose: () => void }) {
   const loggedIn = state.kind === "ativo" || state.kind === "sessao-offline";
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("auth.title")} onClose={onClose} />
 
       <div className="space-y-6 p-4">

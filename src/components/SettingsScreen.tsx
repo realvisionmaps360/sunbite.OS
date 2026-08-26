@@ -6,16 +6,26 @@ import { getCupPrice, getToppingPrice } from "../prices";
 import { loadConfig, syncNow } from "../sync";
 import { AdminHeader, Card, TileButton } from "./ui";
 
+/**
+ * Modulo unico de configuracao (PRD V2 §12). A V2 tirou Cardapio,
+ * Fornecedores, Precos e Sistema da Home: eles nao sumiram, passaram a abrir
+ * daqui. Era a duplicacao que o PRD aponta — a mesma coisa aparecia em
+ * "Ajustes", "Sistema" e "Precos", e nenhum dos tres era o dono.
+ */
 export function SettingsScreen({
   onClose,
   onDataChanged,
   onOpenSystem,
   onOpenPrices,
+  onOpenMenu,
+  onOpenSuppliers,
 }: {
   onClose: () => void;
   onDataChanged: () => void;
   onOpenSystem: () => void;
   onOpenPrices: () => void;
+  onOpenMenu: () => void;
+  onOpenSuppliers: () => void;
 }) {
   const { t } = useLang();
   const cfg = loadConfig();
@@ -52,7 +62,7 @@ export function SettingsScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("settings.title")} onClose={onClose} />
 
       <div className="space-y-3 p-4 select-text">
@@ -67,6 +77,12 @@ export function SettingsScreen({
             })}
           </p>
           <TileButton emoji="💰" label={t("settings.priceHint")} variant="outline" onClick={onOpenPrices} />
+          <TileButton emoji="📖" label={t("home.menu")} variant="outline" onClick={onOpenMenu} />
+        </Card>
+
+        <Card>
+          <h2 className="font-display text-xl">{t("home.stock")}</h2>
+          <TileButton emoji="🏭" label={t("home.suppliers")} variant="outline" onClick={onOpenSuppliers} />
         </Card>
 
         <Card>

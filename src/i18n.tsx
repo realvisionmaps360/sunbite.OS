@@ -358,6 +358,21 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "home.settings": "Ajustes",
     "home.system": "Sistema",
     "home.login": "Entrar",
+
+    // ── Home V2 (PRD §4) ────────────────────────────────────────────────
+    "home.opClosed": "Operação fechada",
+    "home.opOpen": "Operação em andamento",
+    "home.startOp": "Iniciar operação",
+    "home.keepSelling": "Continuar vendendo",
+    "home.today": "Hoje",
+    "home.cups": "Copos",
+    "home.revenue": "Faturamento",
+    "home.cash": "Dinheiro",
+    "home.elapsed": "Tempo",
+    "home.aiCta": "Sunbite IA",
+    "home.more": "Mais",
+
+    "nav.start": "Início",
   },
 
   de: {
@@ -707,6 +722,21 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "home.settings": "Einstellungen",
     "home.system": "System",
     "home.login": "Anmelden",
+
+    // ── Home V2 (PRD §4) ────────────────────────────────────────────────
+    "home.opClosed": "Betrieb geschlossen",
+    "home.opOpen": "Betrieb läuft",
+    "home.startOp": "Betrieb starten",
+    "home.keepSelling": "Weiter verkaufen",
+    "home.today": "Heute",
+    "home.cups": "Becher",
+    "home.revenue": "Umsatz",
+    "home.cash": "Bargeld",
+    "home.elapsed": "Dauer",
+    "home.aiCta": "Sunbite KI",
+    "home.more": "Mehr",
+
+    "nav.start": "Start",
   },
 };
 

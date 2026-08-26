@@ -132,7 +132,7 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
   const supplierName = (id: string | null) => suppliers.find((s) => s.id === id)?.name ?? "—";
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("purchases.title")} onClose={onClose} />
 
       {!online && (

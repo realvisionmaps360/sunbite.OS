@@ -1,6 +1,16 @@
 import { AnimatePresence } from "framer-motion";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { HomeScreen } from "./components/HomeScreen";
+import { BottomNav, BOTTOM_NAV_PAD } from "./components/BottomNav";
 import { OrderSummary } from "./components/OrderSummary";
 import { PaymentSheet } from "./components/PaymentSheet";
 import { ReviewSheet } from "./components/ReviewSheet";
@@ -57,6 +67,64 @@ export type Screen =
   | "prices"
   | "places"
   | "ai";
+
+/**
+ * Casca compartilhada das telas carregadas sob demanda: fronteira de erro,
+ * espera enquanto o chunk baixa, e uma saida para a Home que funciona mesmo
+ * quando a tela nem carregou.
+ *
+ * Antes da V2 este bloco estava escrito onze vezes, identico, com so o nome
+ * da tela e a chave de erro mudando — quase 230 linhas. Errar uma copia era
+ * deixar uma tela sem rede de seguranca sem ninguem notar.
+ */
+function LazyScreen({
+  onClose,
+  errorText,
+  children,
+}: {
+  onClose: () => void;
+  errorText: string;
+  children: ReactNode;
+}) {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="tela-sobreposta z-20 flex flex-col bg-cream-soft">
+          <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
+            <button onClick={onClose} className="px-3 py-1 text-3xl leading-none">
+              ×
+            </button>
+          </header>
+          <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
+            {errorText}
+          </p>
+        </div>
+      }
+    >
+      <Suspense fallback={<div className="tela-sobreposta z-20 bg-cream-soft" />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+/** [tela, componente, chave do texto de erro] — a ordem nao importa. */
+const LAZY_SCREENS: [Screen, ComponentType<{ onClose: () => void }>, string][] = [
+  ["login", LoginScreen, "auth.loadError"],
+  ["system", SystemScreen, "system.loadError"],
+  ["operation", OperationScreen, "operation.loadError"],
+  ["equipment", EquipmentScreen, "equipment.loadError"],
+  ["suppliers", SuppliersScreen, "suppliers.loadError"],
+  ["stock", StockScreen, "stock.loadError"],
+  ["purchases", PurchasesScreen, "purchases.loadError"],
+  ["finance", FinanceScreen, "finance.loadError"],
+  ["prices", PricesScreen, "prices.loadError"],
+  ["places", PlacesScreen, "places.loadError"],
+  ["ai", AIScreen, "ai.loadError"],
+];
+
+/** Telas onde a barra de baixo NAO aparece — ver BottomNav.tsx. */
+const SEM_BARRA: Screen[] = ["sale", "payment", "review"];
 
 function stamp() {
   const d = new Date();
@@ -245,12 +313,19 @@ export default function App() {
   /** Fecha as telas administrativas de volta para a Home. */
   const voltarHome = () => setScreen("home");
 
+  const comBarra = !SEM_BARRA.includes(screen);
+
   if (screen === "home") {
-    return <HomeScreen onNavigate={setScreen} />;
+    return (
+      <div className={`h-full ${BOTTOM_NAV_PAD}`}>
+        <HomeScreen onNavigate={setScreen} />
+        <BottomNav current={screen} onNavigate={setScreen} />
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-full flex-col bg-brand">
+    <div className={`flex h-full flex-col bg-brand ${comBarra ? BOTTOM_NAV_PAD : ""}`}>
       <div className="flex items-center justify-between gap-2 bg-brand-dark px-3 pt-3 pb-1 text-cream/80">
         <button
           onClick={() => setScreen("home")}
@@ -370,244 +445,27 @@ export default function App() {
           onDataChanged={refreshPending}
           onOpenSystem={() => setScreen("system")}
           onOpenPrices={() => setScreen("prices")}
+          onOpenMenu={() => setScreen("menu")}
+          onOpenSuppliers={() => setScreen("suppliers")}
         />
       )}
 
-      {screen === "login" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("auth.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <LoginScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "system" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("system.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <SystemScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "operation" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("operation.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <OperationScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "equipment" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("equipment.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <EquipmentScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "suppliers" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("suppliers.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <SuppliersScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "stock" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("stock.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <StockScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "purchases" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("purchases.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <PurchasesScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "finance" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("finance.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <FinanceScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "prices" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("prices.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <PricesScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "places" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  ×
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("places.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <PlacesScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {screen === "ai" && (
-        <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 z-20 flex flex-col bg-cream-soft">
-              <header className="flex items-center justify-end bg-brand px-4 py-3 text-cream">
-                <button onClick={voltarHome} className="px-3 py-1 text-3xl leading-none">
-                  x
-                </button>
-              </header>
-              <p className="flex-1 flex items-center justify-center p-6 text-center text-brand-dark">
-                {t("ai.loadError")}
-              </p>
-            </div>
-          }
-        >
-          <Suspense fallback={<div className="fixed inset-0 z-20 bg-cream-soft" />}>
-            <AIScreen onClose={voltarHome} />
-          </Suspense>
-        </ErrorBoundary>
+      {/* As telas pesadas, todas com a mesma casca (ver LAZY_SCREENS). */}
+      {LAZY_SCREENS.map(
+        ([nome, Tela, erroKey]) =>
+          screen === nome && (
+            <LazyScreen key={nome} onClose={voltarHome} errorText={t(erroKey)}>
+              <Tela onClose={voltarHome} />
+            </LazyScreen>
+          ),
       )}
 
       <SaleConfirmation
         data={confirmation}
         onDone={() => setConfirmation(null)}
       />
+
+      {comBarra && <BottomNav current={screen} onNavigate={setScreen} />}
 
       {/* Erro nunca é comemoração: fica vermelho, parado e por mais tempo. */}
       {error && (

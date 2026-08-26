@@ -72,28 +72,88 @@ export function phaseFor(status: OperationStatus, prepDone: boolean): Phase {
 }
 
 const OPEN_OP_CACHE_KEY = "sunbite.operation.open_id";
+const OPEN_OP_VIEW_KEY = "sunbite.operation.open_view";
+
+/**
+ * O que a Home mostra sobre a operacao aberta, sem chamar o servidor (V2).
+ *
+ * Os dois primeiros campos vem da leitura anonima abaixo. `opened_at` e
+ * `place_name` NAO cabem ali: a Etapa 6 fechou `operations` para o anon em
+ * cinco colunas (id, status, local_date, place_id, event_id) e `places`
+ * inteira exige sessao. Quem consegue le-los e a tela de Operacao, ja
+ * logada — e ela deposita aqui pela `cacheOpenOperationView`. Por isso os
+ * dois sao opcionais: a Home mostra a duracao e o local quando existem, e
+ * segue funcionando sem eles.
+ */
+export interface OpenOperationView {
+  id: string;
+  local_date: string;
+  opened_at?: string | null;
+  place_name?: string | null;
+}
 
 /**
  * Busca a operacao aberta (se houver) e guarda o id em cache local. Chamada
  * pelo mesmo efeito de sincronizacao de App.tsx (abrir, voltar rede, 2 em 2
  * min) — nunca bloqueia, nunca lanca: offline e config ausente sao estados
  * normais, o cache so fica desatualizado ate o proximo ciclo.
+ *
+ * Escreve DUAS chaves: o id cru, que o caminho da venda le para carimbar
+ * `operation_id`, e a vista da Home. O id continua sozinho na sua chave de
+ * proposito — mudar o formato do que a venda le seria arriscar o unico
+ * caminho que nao pode falhar.
  */
 export async function refreshOpenOperationId(): Promise<void> {
   const cfg = loadConfig();
   if (!cfg || !navigator.onLine) return;
   try {
     const res = await fetch(
-      `${cfg.url}/rest/v1/operations?select=id,status&status=eq.open&limit=1`,
+      `${cfg.url}/rest/v1/operations?select=id,status,local_date&status=eq.open&limit=1`,
       { headers: { apikey: cfg.anonKey, Authorization: `Bearer ${cfg.anonKey}` } },
     );
     if (!res.ok) return;
-    const rows = (await res.json()) as { id: string }[];
-    if (rows.length > 0) await setCache(OPEN_OP_CACHE_KEY, rows[0].id);
-    else await deleteCache(OPEN_OP_CACHE_KEY);
+    const rows = (await res.json()) as { id: string; local_date: string }[];
+    if (rows.length > 0) {
+      const row = rows[0];
+      await setCache(OPEN_OP_CACHE_KEY, row.id);
+      // Operacao diferente da que estava em cache zera os detalhes: local e
+      // hora de abertura da operacao passada nao valem para a nova.
+      const anterior = await getCache<OpenOperationView>(OPEN_OP_VIEW_KEY);
+      const detalhes = anterior?.id === row.id ? anterior : undefined;
+      await setCache(OPEN_OP_VIEW_KEY, {
+        id: row.id,
+        local_date: row.local_date,
+        opened_at: detalhes?.opened_at ?? null,
+        place_name: detalhes?.place_name ?? null,
+      } satisfies OpenOperationView);
+    } else {
+      await deleteCache(OPEN_OP_CACHE_KEY);
+      await deleteCache(OPEN_OP_VIEW_KEY);
+    }
   } catch {
     // Sem rede ou erro de fetch: mantem o valor em cache, tenta de novo depois.
   }
+}
+
+/**
+ * Completa a vista da Home com o que so quem tem sessao consegue ler.
+ * Chamada pela tela de Operacao ao carregar; nunca lanca, porque falhar aqui
+ * so custa um detalhe na Home, nunca a operacao em si.
+ */
+export async function cacheOpenOperationView(
+  view: Pick<OpenOperationView, "id"> & Partial<OpenOperationView>,
+): Promise<void> {
+  try {
+    const anterior = await getCache<OpenOperationView>(OPEN_OP_VIEW_KEY);
+    await setCache(OPEN_OP_VIEW_KEY, { ...anterior, ...view } as OpenOperationView);
+  } catch {
+    // Detalhe da Home nao vale derrubar a tela de Operacao.
+  }
+}
+
+/** Lido pela Home. Devolve nulo quando nao ha operacao aberta. */
+export async function getCachedOpenOperation(): Promise<OpenOperationView | null> {
+  return (await getCache<OpenOperationView>(OPEN_OP_VIEW_KEY)) ?? null;
 }
 
 /** Lido ao gravar uma venda — carimba operation_id mesmo offline. */
