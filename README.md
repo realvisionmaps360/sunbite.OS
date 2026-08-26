@@ -101,11 +101,6 @@ heranca de quando o app era so o PDV. **Removidos na Etapa 9, a pedido do Felipe
 uma pagina propria para cada coisa, o gesto virou um segundo caminho para o mesmo lugar,
 e um caminho que disparava sem querer no meio do atendimento.
 
-Ate a Etapa 8 a tela de venda tinha gestos laterais (arrastar abria Vendas e Cardapio),
-heranca de quando o app era so o PDV. **Removidos na Etapa 9, a pedido do Felipe**: com
-uma pagina propria para cada coisa, o gesto virou um segundo caminho para o mesmo lugar,
-e um caminho que disparava sem querer no meio do atendimento.
-
 ## Numeros que cabem
 
 [`src/components/Valor.tsx`](src/components/Valor.tsx) escolhe o tamanho da fonte pelo
@@ -271,6 +266,68 @@ Os numeros sao o pior caso de largura de proposito: `CHF 1234.50` em todas as li
 o calculo foi conferido por sonda, e sonda nao mostra texto vazando nem numero encostando na
 borda. Dois defeitos da Fatia 4 so apareceram na imagem: `± CHF -312.50` com dois sinais na
 mesma linha, e um rotulo alemao empurrando o "?" para uma segunda linha sozinho.
+
+## Estoque calculado e a ficha do copo (Fatia 5 da V2)
+
+O app **nao baixa estoque a cada venda**, e isso e decisao dura, nao preguica:
+
+1. gravar movimento de estoque exige sessao (`src/outbox.ts`), e **a venda nao pode
+   depender de login** — e a decisao 1 do projeto;
+2. venda que sincroniza duas vezes descontaria estoque duas vezes.
+
+Em vez disso a conta mora no banco, como o gatilho `apply_stock_movement`. A tabela
+`recipe` guarda a ficha do copo e a view `v_stock_consumption` cruza com `sales.cups`:
+
+```
+calculado = tudo que entrou (movimentos) - consumo derivado das vendas ja sincronizadas
+```
+
+Nada a gravar, nada a duplicar, e funciona offline por construcao: a conta se corrige
+sozinha assim que uma venda offline sobe.
+
+A ficha (`applies_to` = `cup`, ou o id do topping, que so sai quando escolhido):
+
+| Item | Por copo |
+|---|---|
+| Morango | 0,156 kg (140 g liquido + 10% de perda na limpeza) |
+| Chocolate | 0,033 kg (30 ml x 1,1 g/ml) |
+| Copo 300ml rPET | 1 un |
+| Colher | 1 un |
+| Cada topping escolhido | 0,015 kg |
+
+> O id do topping (`almond`, `coconut`, `cream`, `marshmallow`) e o mesmo que a venda grava
+> desde o primeiro dia e **nunca muda com o idioma**. Foi essa escolha la no comeco que
+> permitiu derivar o consumo hoje sem tocar em nenhuma venda ja gravada.
+
+**O motivo `uso` deixa de servir para copo vendido.** A venda ja desconta pela ficha; baixar
+a mao o que ela desconta faz a mesma coisa sair duas vezes. `uso` e para o que se gasta fora
+da venda: teste, degustacao, o que estragou.
+
+**`Contei` nunca sobrescreve.** A contagem fisica vira um `stock_movement` de `ajuste` com a
+diferenca — mesma familia de decisao que "cancelar nao e apagar". Se a diferenca for zero,
+nada e registrado.
+
+**Item sem compra lancada fica negativo, e a tela precisa saber disso.** A venda desconta, a
+entrada nunca aconteceu. Nesse caso a tela diz que acabou e que falta lancar a compra, em vez
+de "da para -12 copos".
+
+## ⚠️ View nova precisa de `revoke ... from anon`
+
+O padrao do schema `public` do Supabase e permissivo, e **RLS de tabela nao protege view**:
+a view pertence ao dono e ignora o RLS das tabelas de baixo.
+
+Foi assim que `v_finance_daily` ficou legivel por `anon` desde a Etapa 1 — quem tivesse a
+chave que viaja dentro do JavaScript do app lia o faturamento inteiro, dia a dia, o oposto da
+razao pela qual o `SELECT` de `sales` foi mantido fechado. Corrigido no SQL da Fatia 5.
+
+Toda view nova: `revoke all ... from anon; grant select ... to authenticated;`
+
+## Conferir SQL antes de rodar em producao
+
+`npm i @electric-sql/pglite` no diretorio de scratchpad sobe um Postgres de verdade em WASM.
+Da para rodar o esquema inteiro e conferir a conta com numeros, em vez de mandar o Felipe
+rodar em producao as cegas. Foi o que confirmou que 10 copos com um topping dao exatamente
+1,560 kg de morango, e o que achou o caso do estoque negativo.
 
 ## Como funciona offline
 
