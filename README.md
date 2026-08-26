@@ -1,11 +1,16 @@
-# Sunbite PDV — Offline V1
+# Sunbite.OS
 
-Registro de vendas da Sunbite em poucos segundos, sem internet.
+Sistema interno de operacoes da Sunbite. Comecou como PDV offline (registrar a venda em
+poucos segundos, sem internet) e cresceu para operacao, estoque, compras, financeiro,
+locais, equipamentos e IA.
 
 No ar: **https://sunbite-pdv.vercel.app**
 
-Base: `prd-pdv-offline-v1` · decisoes: `DEC-2026-001` (preco e formato) e
-`DEC-2026-002` (cancelamento e painel).
+Base: `prd-pdv-offline-v1` e `prd-sunbite-os-v2` · decisoes: `DEC-2026-001` (preco e
+formato) e `DEC-2026-002` (cancelamento e painel).
+
+**A regra que nao muda:** vender nunca depende de login, de internet nem de operacao
+aberta. Todo o resto do sistema foi construido em volta disso.
 
 ## Regra de preco
 
@@ -39,13 +44,62 @@ preco sai de [`src/config.ts`](src/config.ts) — nenhum numero digitado a mao a
 - *Resumo*: total da temporada, media por venda, copos por venda, melhor dia,
   canceladas e o ranking de toppings.
 
-**Ajustes** — precos, conexao com o Supabase e a limpeza das vendas de hoje.
+**Ajustes** — desde a V2 e o **modulo unico de configuracao**: preco, Cardapio,
+Fornecedores, Sistema, conexao com o Supabase e a limpeza das vendas de hoje. Antes a
+mesma coisa aparecia em "Ajustes", "Sistema" e "Precos" e nenhum dos tres era o dono.
+
+## Home (V2)
+
+Deixou de ser um menu de 14 ladrilhos e passou a responder *"o que eu preciso fazer
+agora"*:
+
+- estado da operacao no topo (`Operacao fechada` / `Operacao em andamento · Aarau`);
+- uma acao principal grande: **Iniciar operacao**, ou **Continuar vendendo** se ja ha
+  operacao aberta;
+- o resumo do dia em 2×2: copos, faturamento, dinheiro e tempo;
+- **✦ Sunbite IA** em destaque;
+- seis modulos: Operacao, Vendas, Financeiro, Estoque, Locais, Equipamento;
+- Ajustes discreto no fim.
+
+**"Dinheiro" nao e o caixa.** E o que entrou em dinheiro hoje. O caixa de verdade
+precisa do `cash_initial`, que a Etapa 6 fechou para quem nao esta logado — a conta
+completa mora no Financeiro.
+
+> ⚠️ [`HomeScreen.tsx`](src/components/HomeScreen.tsx) **nao importa** `../auth` nem
+> `../supabase`, e e essa ausencia — nao um `if` — que mantem o bundle de entrada leve e
+> o app abrindo offline. O resumo sai do IndexedDB (`allSales`) e o estado da operacao do
+> cache local `sunbite.operation.open_view`. Se um dia alguem precisar de um dado que so
+> vem do servidor, o caminho e **depositar no cache** de quem ja tem sessao (ver
+> `cacheOpenOperationView` em [`src/operations.ts`](src/operations.ts)), nunca chamar o
+> Supabase daqui.
 
 ## Navegacao
 
 Cada tela tem seu botao na Home, e volta para la pelo **‹ Inicio** (ou pelo **×**, em
-Vendas e Cardapio, que voltam para Vender). O botao fisico de voltar do Android faz o
-mesmo caminho — ver `goBack()` em [`src/App.tsx`](src/App.tsx).
+Vendas e Cardapio). O botao fisico de voltar do Android faz o mesmo caminho — ver
+`goBack()` em [`src/App.tsx`](src/App.tsx).
+
+Desde a V2 ha tambem uma **barra fixa embaixo** com quatro destinos: Inicio · Vender ·
+Vendas · IA.
+
+> ⚠️ **`Vender` esta na barra porque precisa estar.** A Home V2 nao tem mais ladrilho
+> "Vender": a acao principal cobre isso, mas so leva a vender quando ha operacao aberta.
+> Sem a barra, ficar sem operacao deixava a venda inalcancavel. Quem tirar `sale` de la
+> tem que devolver o caminho na Home.
+
+> ⚠️ **A barra some na venda, no pagamento e na conferencia** (`SEM_BARRA` em
+> `App.tsx`). Durante o atendimento o dedo nao pode encostar em navegacao por acidente —
+> foi exatamente por isso que os gestos laterais sairam.
+
+Telas administrativas usam posicionamento fixo e por isso **ignoram o padding do
+container**: elas precisam da classe `.tela-sobreposta` ([`src/index.css`](src/index.css))
+para pararem acima da barra. Tela nova que abrir por cima usa essa classe, nao
+`fixed inset-0`.
+
+Ate a Etapa 8 a tela de venda tinha gestos laterais (arrastar abria Vendas e Cardapio),
+heranca de quando o app era so o PDV. **Removidos na Etapa 9, a pedido do Felipe**: com
+uma pagina propria para cada coisa, o gesto virou um segundo caminho para o mesmo lugar,
+e um caminho que disparava sem querer no meio do atendimento.
 
 Ate a Etapa 8 a tela de venda tinha gestos laterais (arrastar abria Vendas e Cardapio),
 heranca de quando o app era so o PDV. **Removidos na Etapa 9, a pedido do Felipe**: com
@@ -61,6 +115,31 @@ entao os degraus sao diferentes por tamanho.
 Motivo: `CHF 222.00` ocupava 109px de um cartao de 114px e encostava nas duas bordas;
 com quatro digitos vazava de verdade. Testado com um dia de `CHF 1320.00`, em portugues
 e em alemao, medindo por codigo que nenhum texto passa da largura do seu container.
+
+**O `<Valor>` sozinho nao basta se a coluna for estreita demais.** O resumo da Home
+nasceu com os quatro numeros numa fileira so; cada cartao ficou com ~85px e
+`CHF 1251.50` vazou por cima do vizinho mesmo no menor degrau. Virou 2×2. A licao: o
+componente ajusta a fonte, nao a largura da coluna — quem escolhe a grade precisa dar
+espaco.
+
+## Cores — a hierarquia de fundo (V2)
+
+Cada camada tem que ser diferente da de baixo, senao o elemento some:
+
+| Camada | Cor |
+|---|---|
+| pagina | `bg-cream-soft` |
+| `Card` | `bg-cream` |
+| campo **dentro** de um Card | `bg-cream-soft` |
+| campo **solto** na pagina | `bg-cream` |
+
+Nenhuma tela usa `bg-white` — o kit compartilhado fica em
+[`src/components/ui.tsx`](src/components/ui.tsx) e e de la que toda tela puxa cabecalho,
+cartao, badge e botao, em vez de reinventar.
+
+Descoberto na marra: quando o `Card` virou creme, os campos do login sumiram no fundo —
+pagina e campo tinham virado a mesma cor e so a borda os separava. O build passou limpo;
+foi a screenshot que mostrou.
 
 ## Cancelar nao e apagar
 
