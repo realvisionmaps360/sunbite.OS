@@ -263,6 +263,8 @@ function systemPrompt(lang: "pt" | "de") {
 
 Responda SEMPRE no idioma: ${lang === "de" ? "alemao (Deutsch)" : "portugues"}.
 
+FORMATO: texto simples, lido no celular. NUNCA use markdown — nada de **negrito**, ##titulo, ou listas com - e *. Se precisar separar assuntos, use paragrafos curtos.
+
 Voce tem tres coisas que pode fazer, e pode combinar mais de uma na mesma pergunta:
 
 1. RESPONDER — se a pessoa fez uma pergunta sobre os dados da Sunbite (vendas, estoque, compras, caixa, pendencias, equipamento), USE as ferramentas de consulta antes de responder. Nunca invente numero. Se a ferramenta nao achar nada, diga isso, nao invente.

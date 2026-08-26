@@ -63,6 +63,18 @@ function fmt(v: unknown): string {
   return String(v);
 }
 
+/**
+ * O prompt manda a IA responder em texto simples, mas modelo escorrega —
+ * e `**Morango:**` cru na tela e defeito visivel. Isto e o cinto, o prompt
+ * e o suspensorio. Achado ao ver a resposta em alemao em producao.
+ */
+function semMarkdown(texto: string): string {
+  return texto
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*]\s+/gm, "• ");
+}
+
 /** Uma linha por item da compra, em vez do array cru em JSON. */
 function ItemLines({ itens }: { itens: any[] }) {
   return (
@@ -276,7 +288,7 @@ function AIBody({ onClose }: { onClose: () => void }) {
             {turn.reply_text && (
               <div className="flex justify-start">
                 <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-sm bg-cream px-4 py-2 shadow-sm">
-                  {turn.reply_text}
+                  {semMarkdown(turn.reply_text)}
                 </p>
               </div>
             )}
