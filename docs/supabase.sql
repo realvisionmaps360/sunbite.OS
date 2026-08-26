@@ -1396,3 +1396,17 @@ grant select on public.v_stock_status      to authenticated;
 -- quebra a tela de Financeiro, que so abre logada.
 revoke all on public.v_finance_daily from anon;
 grant select on public.v_finance_daily to authenticated;
+
+
+-- ============================================================================
+-- Fatia 6 do plano V2 — Sunbite IA vira chat
+-- Ver 02-Projetos/sunbite-ops/plano-v2.md, secao "Fatia 6"
+--
+-- A IA ate aqui so sabia propor cards. Para ela responder pergunta em texto
+-- livre ("quanto vendemos hoje?"), precisa de um lugar para guardar essa
+-- resposta — e nao e o mesmo campo de raw_response (que guarda o JSON cru
+-- da ferramenta de propor_registros, quando ela e chamada).
+-- ============================================================================
+
+alter table public.ai_messages
+  add column if not exists reply_text text;

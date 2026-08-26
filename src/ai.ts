@@ -30,16 +30,56 @@ export interface AISuggestion {
   status: "pending" | "applied" | "rejected";
 }
 
-/** Manda a frase para a IA e devolve os cards propostos. */
-export async function parseMessage(texto: string, modo: "text" | "voice"): Promise<AISuggestion[]> {
+/** Uma volta da conversa: o que a pessoa disse, o que a IA respondeu (texto
+ * livre, quando houve) e os cards daquela mensagem, nessa ordem de chegada. */
+export interface AITurn {
+  id: string;
+  input_text: string;
+  reply_text: string | null;
+  error: string | null;
+  created_at: string;
+  cards: AISuggestion[];
+}
+
+/** Manda a mensagem para a IA. Ela pode responder em texto, propor cards, ou
+ * as duas coisas — ver supabase/functions/ai-parse (Fatia 6). */
+export async function sendMessage(
+  texto: string,
+  modo: "text" | "voice",
+  lang: "pt" | "de",
+): Promise<{ replyText: string | null; cards: AISuggestion[] }> {
   const supabase = await getSupabase();
   const { data, error } = await supabase.functions.invoke("ai-parse", {
-    body: { texto, modo },
+    body: { texto, modo, lang },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.detail || data.error);
-  void logEvent("info", `IA analisou uma frase e propos ${data?.cards?.length ?? 0} registro(s).`);
-  return (data?.cards ?? []) as AISuggestion[];
+  void logEvent(
+    "info",
+    `IA respondeu${data?.reply_text ? " em texto" : ""} e propos ${data?.cards?.length ?? 0} registro(s).`,
+  );
+  return { replyText: data?.reply_text ?? null, cards: (data?.cards ?? []) as AISuggestion[] };
+}
+
+/** Historico da conversa, mais antiga primeiro — para a tela virar chat. */
+export async function fetchHistory(limit = 40): Promise<AITurn[]> {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from("ai_messages")
+    .select("id, input_text, reply_text, error, created_at, ai_suggestions(*)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? [])
+    .map((m: any) => ({
+      id: m.id,
+      input_text: m.input_text,
+      reply_text: m.reply_text,
+      error: m.error,
+      created_at: m.created_at,
+      cards: (m.ai_suggestions ?? []) as AISuggestion[],
+    }))
+    .reverse();
 }
 
 /**

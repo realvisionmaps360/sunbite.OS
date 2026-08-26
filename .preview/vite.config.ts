@@ -60,26 +60,98 @@ const ROWS = {
     { id: "f1", name: "A confirmar — morango" },
     { id: "f2", name: "Denner Aarau" },
   ],
+  equipment: [
+    { id: "eq1", name: "Freio da foodbike", status: "issue", critical: true, notes: "Freio fraco — problema de seguranca ativo." },
+    { id: "eq2", name: "Bateria do motor", status: "issue", critical: true, notes: "Descarrega apesar de indicar 100%." },
+  ],
+  pendencies: [
+    { id: "pd1", description: "Confirmar local da venda de 15.08.2026", critical: false, status: "aberta", origin: "seed" },
+  ],
   purchases: [
     { id: "p1", supplier_id: "f2", purchased_at: "2026-08-25", total: 1234.5, notes: null, created_by: null, created_at: "" },
     { id: "p2", supplier_id: "f1", purchased_at: "2026-08-20", total: 55, notes: null, created_by: null, created_at: "" },
+  ],
+  // Fatia 6. Historico de chat com os tres casos que a tela precisa saber
+  // mostrar: pergunta respondida so em texto, frase que virou cards (um ja
+  // aplicado, um ja descartado, um ainda pendente), e o pior caso de largura
+  // — texto longo em alemao com CHF 1234.50 dentro.
+  ai_messages: [
+    {
+      id: "m1",
+      input_text: "quanto vendemos hoje?",
+      reply_text: "Hoje: CHF 1234.50 em 15 vendas, 27 copos. Dinheiro CHF 1234.50, TWINT CHF 1234.50. Uma venda cancelada.",
+      error: null,
+      created_at: "2026-08-26T10:00:00Z",
+      ai_suggestions: [],
+    },
+    {
+      id: "m2",
+      input_text: "acabou o marshmallow, comprei 2,5kg de chocolate por 20 na Denner, a colher nova nao chegou e o freio continua ruim",
+      reply_text: "Anotado. O marshmallow zerei pelo saldo atual — confere se bate.",
+      error: null,
+      created_at: "2026-08-26T10:05:00Z",
+      ai_suggestions: [
+        { id: "c1", message_id: "m2", target_table: "stock_movements", operation: "insert", summary: "Baixa de marshmallow (acabou o estoque)", payload: { stock_item_name: "Marshmallow", quantity_delta: -3, reason: "ajuste", notes: "Saldo zerado conforme relato de fim do dia" }, uncertain: true, status: "pending" },
+        { id: "c2", message_id: "m2", target_table: "purchases", operation: "insert", summary: "Compra de 2,5kg de chocolate na Denner por CHF 1234.50", payload: { supplier_name: "Denner Aarau", purchased_at: "2026-08-26", total: 1234.5, itens: [{ descricao: "Chocolate", quantidade: 2.5, custo_unitario: 493.8, stock_item_name: "Chocolate" }] }, uncertain: false, status: "applied" },
+        { id: "c3", message_id: "m2", target_table: "pendencies", operation: "insert", summary: "Colher nova nao chegou", payload: { description: "Colher nova pendente de entrega", critical: false, origin: "compra" }, uncertain: false, status: "rejected" },
+        { id: "c4", message_id: "m2", target_table: "equipment", operation: "insert", summary: "Freio da foodbike continua com problema", payload: { name: "Freio da foodbike", status: "issue", critical: true, notes: "Relato de fim de dia: problema persiste" }, uncertain: false, status: "pending" },
+      ],
+    },
   ],
 };
 
 const MOCK_SUPABASE = `
 const ROWS = ${JSON.stringify(ROWS)};
 const result = (table) => {
-  const p = Promise.resolve({ data: ROWS[table] ?? [], error: null });
+  // order() ordena de verdade: enquanto era no-op, o preview nao conseguia
+  // pegar erro de ordenacao — e chat sem ordem certa e chat errado.
+  let rows = [...(ROWS[table] ?? [])];
+  // insert() precisa devolver a linha criada com id, como o Supabase de
+  // verdade faz. Sem isto, aprovar um card estourava no preview por um
+  // motivo que nao existe em producao.
+  let inserted = null;
+  const p = { then: (f) => Promise.resolve({ data: rows, error: null }).then(f) };
   const q = {
-    select: () => q, eq: () => q, neq: () => q, order: () => q, limit: () => p,
-    single: () => Promise.resolve({ data: (ROWS[table] ?? [])[0] ?? null, error: null }),
-    insert: () => q,
-    then: p.then.bind(p), catch: p.catch.bind(p), finally: p.finally.bind(p),
+    select: () => q, eq: () => q, neq: () => q,
+    insert: (row) => { inserted = { id: "novo-" + table, ...row }; return q; },
+    order: (col, opts) => {
+      const asc = opts?.ascending !== false;
+      rows.sort((a, b) => (a?.[col] > b?.[col] ? 1 : a?.[col] < b?.[col] ? -1 : 0) * (asc ? 1 : -1));
+      return q;
+    },
+    limit: (n) => Promise.resolve({ data: rows.slice(0, n), error: null }),
+    single: () => Promise.resolve({ data: inserted ?? rows[0] ?? null, error: null }),
+    maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
+    update: () => q,
+    ilike: () => q,
+    then: (f, r) => Promise.resolve({ data: rows, error: null }).then(f, r),
+    catch: (f) => Promise.resolve({ data: rows, error: null }).catch(f),
+    finally: (f) => Promise.resolve({ data: rows, error: null }).finally(f),
   };
   return q;
 };
 export function getSupabase() {
-  return Promise.resolve({ from: (table) => result(table) });
+  return Promise.resolve({
+    from: (table) => result(table),
+    // Fatia 6: a IA responde de mentira, para a tela poder ser vista sem
+    // gastar chamada de verdade nem sujar o banco.
+    functions: {
+      invoke: (_name, opts) => {
+        const texto = opts?.body?.texto ?? "";
+        const pergunta = /\\?|quanto|wie viel|wieviel/i.test(texto);
+        return Promise.resolve({
+          data: pergunta
+            ? { message_id: "novo", reply_text: "Hoje: CHF 1234.50 em 15 vendas, 27 copos. Dinheiro CHF 1234.50, TWINT CHF 1234.50.", cards: [] }
+            : {
+                message_id: "novo",
+                reply_text: "Anotado.",
+                cards: [{ id: "novo1", message_id: "novo", target_table: "pendencies", operation: "insert", summary: texto.slice(0, 60), payload: { description: texto.slice(0, 80), critical: false, origin: "ia" }, uncertain: false, status: "pending" }],
+              },
+          error: null,
+        });
+      },
+    },
+  });
 }
 `;
 
@@ -90,6 +162,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import FinanceScreen from "./components/FinanceScreen.tsx";
 import StockScreen from "./components/StockScreen.tsx";
+import AIScreen from "./components/AIScreen.tsx";
 import { LangProvider } from "./i18n.tsx";
 
 // Abre direto na tela do ?screen=, no idioma do ?lang= — o unico jeito de
@@ -97,7 +170,8 @@ import { LangProvider } from "./i18n.tsx";
 const params = new URLSearchParams(location.search);
 const lang = params.get("lang");
 if (lang === "de" || lang === "pt") localStorage.setItem("sunbite.lang", lang);
-const Tela = params.get("screen") === "stock" ? StockScreen : FinanceScreen;
+const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen };
+const Tela = SCREENS[params.get("screen")] ?? FinanceScreen;
 
 // ?click=N abre sozinho o N-esimo "?" da tela, para fotografar a caixinha
 // do tutorial sem um dedo humano.

@@ -1,18 +1,19 @@
-// Edge Function: recebe uma frase livre (digitada ou ditada) e usa IA para
-// PROPOR registros nos 9 modulos administrativos do app.
+// Edge Function: chat da Sunbite IA (Fatia 6 do plano V2).
 //
-// A funcao NAO escreve em nenhuma tabela de negocio. Ela so grava propostas
-// em ai_suggestions com status 'pending'. Quem aplica na tabela real e o app,
-// no clique de "Aprovar" — mesmo padrao do VisionFlow (analyze-notes +
-// usePendingUpdates). Card rejeitado nunca vira dado.
+// Ate a Fatia 6 esta funcao so sabia propor registros. Agora ela pode: ler
+// dados de verdade (decisao 15), responder em texto livre, e/ou propor —
+// tudo na mesma pergunta, num loop de ferramentas.
+//
+// A funcao continua SEM escrever em nenhuma tabela de negocio por conta
+// propria. Ela so grava propostas em ai_suggestions, com status 'pending'.
+// Quem aplica na tabela real e o app, no clique de "Aprovar" — mesmo padrao
+// do VisionFlow (analyze-notes + usePendingUpdates). Card rejeitado nunca
+// vira dado.
 //
 // A chave da Anthropic fica como secret (ANTHROPIC_API_KEY) e NUNCA vai ao
-// celular. Ver 02-Projetos/sunbite-ops/plano-etapa-9.md.
+// celular. Ver 02-Projetos/sunbite-ops/plano-v2.md, secao "Fatia 6".
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// Extracao de campos e tarefa simples — Haiku da conta e roda barato.
-// Decisao do Felipe, 25/08, com os numeros na mao. Se a qualidade decepcionar
-// no teste real, trocar por "claude-opus-5" aqui nesta linha resolve.
 const MODEL = "claude-haiku-4-5";
 
 const corsHeaders = {
@@ -78,10 +79,10 @@ function sanitizePayload(table: string, campos: Record<string, unknown>) {
   return out;
 }
 
-const TOOL = {
+const PROPOR_TOOL = {
   name: "propor_registros",
   description:
-    "Registra as propostas extraidas da frase do usuario, mapeadas para a area e os campos corretos.",
+    "Registra as propostas extraidas da frase do usuario, mapeadas para a area e os campos corretos. So chame isto quando houver algo de verdade para GRAVAR — nao para responder pergunta.",
   input_schema: {
     type: "object",
     properties: {
@@ -105,7 +106,7 @@ const TOOL = {
             incerto: {
               type: "boolean",
               description:
-                "true quando a leitura e ambigua e voce escolheu a interpretacao mais provavel (ex: '20' podendo ser preco ou quantidade).",
+                "true quando a leitura e ambigua e voce escolheu a interpretacao mais provavel (ex: '20' podendo ser preco ou quantidade, ou preco total vs. preco por unidade).",
             },
             campos: {
               type: "object",
@@ -121,68 +122,208 @@ const TOOL = {
   },
 };
 
-const SYSTEM_PROMPT =
-  `Voce le uma frase livre do dono de uma barraca de morango com chocolate na Suica (Sunbite) e transforma cada informacao em uma proposta de registro, mapeada para a area e os campos corretos.
+// Ferramentas de LEITURA (decisao 15 — a IA pode ler tudo, financeiro
+// incluido). Cada uma e uma consulta fixa, nao SQL livre: mesmo cuidado de
+// seguranca que fez o SELECT de `sales` ficar fechado desde a Etapa 2, so
+// que agora quem le e a Edge Function, com o JWT de quem perguntou (RLS
+// continua valendo — a funcao nao le mais do que o Felipe logado leria).
+const READ_TOOLS = [
+  {
+    name: "vendas_hoje",
+    description: "Faturamento, dinheiro, TWINT, numero de vendas e copos vendidos hoje.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "estoque",
+    description: "Estoque calculado (o que sobrou pelas vendas) por item. Sem 'item', devolve todos.",
+    input_schema: {
+      type: "object",
+      properties: { item: { type: "string", description: "nome ou parte do nome, ex: chocolate" } },
+    },
+  },
+  {
+    name: "ultima_compra",
+    description: "Ultimas compras registradas, filtradas por item quando informado.",
+    input_schema: {
+      type: "object",
+      properties: { item: { type: "string" } },
+    },
+  },
+  {
+    name: "proxima_operacao",
+    description:
+      "Equipamentos com problema, pendencias em aberto e o status da ultima operacao — o que falta resolver antes de abrir de novo.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "caixa",
+    description:
+      "Resumo financeiro do dia (dinheiro, TWINT, despesas, resultado). Sem 'data', usa o dia mais recente com movimento.",
+    input_schema: {
+      type: "object",
+      properties: { data: { type: "string", description: "YYYY-MM-DD" } },
+    },
+  },
+  {
+    name: "diferenca_estoque",
+    description:
+      "Ultimos ajustes de contagem fisica ('Contei') e a diferenca encontrada entre calculado e contado, por item quando informado.",
+    input_schema: {
+      type: "object",
+      properties: { item: { type: "string" } },
+    },
+  },
+];
 
-A frase costuma ser dita no fim da noite, cansado, com varias coisas misturadas. Uma frase pode gerar varias propostas de areas diferentes.
+async function runReadTool(name: string, input: any, caller: any): Promise<unknown> {
+  switch (name) {
+    case "vendas_hoje": {
+      const today = new Date().toISOString().slice(0, 10);
+      const [{ data: fin }, { data: sales }] = await Promise.all([
+        caller.from("v_finance_daily").select("*").eq("local_date", today).maybeSingle(),
+        caller.from("sales").select("cups, cancelled").eq("local_date", today),
+      ]);
+      const ativas = (sales || []).filter((s: any) => !s.cancelled);
+      return {
+        faturamento: fin?.receita_total ?? 0,
+        dinheiro: fin?.receita_dinheiro ?? 0,
+        twint: fin?.receita_twint ?? 0,
+        vendas: ativas.length,
+        copos: ativas.reduce((n: number, s: any) => n + (Array.isArray(s.cups) ? s.cups.length : 0), 0),
+        canceladas: (sales || []).length - ativas.length,
+      };
+    }
 
-Regras gerais:
+    case "estoque": {
+      let q = caller
+        .from("v_stock_status")
+        .select("name, unit, calculado, copos_restantes, low_stock_threshold, ultima_contagem");
+      if (input?.item) q = q.ilike("name", `%${input.item}%`);
+      const { data } = await q.order("name");
+      return data ?? [];
+    }
+
+    case "ultima_compra": {
+      let q = caller
+        .from("purchase_items")
+        .select("quantity, unit_cost, description, stock_items!inner(name), purchases!inner(purchased_at, total, suppliers(name))")
+        .order("purchased_at", { foreignTable: "purchases", ascending: false })
+        .limit(5);
+      if (input?.item) q = q.ilike("stock_items.name", `%${input.item}%`);
+      const { data, error } = await q;
+      if (error) return { erro: error.message };
+      return data ?? [];
+    }
+
+    case "proxima_operacao": {
+      const [{ data: eq }, { data: pend }, { data: ops }] = await Promise.all([
+        caller.from("equipment").select("name, status, critical, notes").neq("status", "ok"),
+        caller
+          .from("pendencies")
+          .select("description, critical, origin")
+          .eq("status", "aberta")
+          .order("critical", { ascending: false }),
+        caller.from("operations").select("status, local_date").order("created_at", { ascending: false }).limit(1),
+      ]);
+      return {
+        equipamento_com_problema: eq ?? [],
+        pendencias_abertas: pend ?? [],
+        ultima_operacao: ops?.[0] ?? null,
+      };
+    }
+
+    case "caixa": {
+      let q = caller.from("v_finance_daily").select("*");
+      q = input?.data ? q.eq("local_date", input.data) : q.order("local_date", { ascending: false }).limit(1);
+      const { data } = await q;
+      const row = Array.isArray(data) ? data[0] : data;
+      return row ?? { aviso: "sem dados para essa data" };
+    }
+
+    case "diferenca_estoque": {
+      let q = caller
+        .from("stock_movements")
+        .select("quantity_delta, notes, created_at, stock_items!inner(name)")
+        .eq("reason", "ajuste")
+        .order("created_at", { ascending: false })
+        .limit(input?.item ? 5 : 10);
+      if (input?.item) q = q.ilike("stock_items.name", `%${input.item}%`);
+      const { data, error } = await q;
+      if (error) return { erro: error.message };
+      return data ?? [];
+    }
+
+    default:
+      return { erro: `ferramenta desconhecida: ${name}` };
+  }
+}
+
+function systemPrompt(lang: "pt" | "de") {
+  return `Voce e a Sunbite IA, a assistente do dono de uma barraca de morango com chocolate na Suica (Sunbite). Seu tom e SECO, REAL E DIRETO: sem elogio generico, sem "Claro!", sem "Fico feliz em ajudar", sem enfeite. Responda a pergunta e pare.
+
+Responda SEMPRE no idioma: ${lang === "de" ? "alemao (Deutsch)" : "portugues"}.
+
+Voce tem tres coisas que pode fazer, e pode combinar mais de uma na mesma pergunta:
+
+1. RESPONDER — se a pessoa fez uma pergunta sobre os dados da Sunbite (vendas, estoque, compras, caixa, pendencias, equipamento), USE as ferramentas de consulta antes de responder. Nunca invente numero. Se a ferramenta nao achar nada, diga isso, nao invente.
+2. PROPOR — se a pessoa contou algo que devia virar registro (comprou, acabou, quebrou, ficou pendente), chame propor_registros.
+3. As duas coisas — pode consultar, responder E propor na mesma mensagem.
+
+Se a mensagem nao tiver nada acionavel nem pergunta, responda algo curto reconhecendo, sem propor nada.
+
+REGRA MAIS IMPORTANTE (nunca duplicar — o dado ja pode existir):
+- O PDV ja registra e desconta cada venda sozinho, automaticamente, pela ficha do copo (quanto morango, chocolate, copo, colher e topping cada copo vendido gasta). Isso acontece SEM voce.
+- Se a frase disser algo como "vendemos 32 copos", "baixa de 56 copos", "as vendas de hoje" — isso e so uma DESCRICAO do que o PDV ja fez sozinho. NUNCA proponha stock_movements para copo vendido. Se quiser confirmar o numero, use a ferramenta vendas_hoje e responda em texto, sem propor nada de estoque.
+- estoque so deve ser proposto para o que o PDV NAO sabe sozinho: sobrou, estragou, foi usado em teste/degustacao, ou uma contagem fisica ("Contei").
+
+Regras gerais para propor:
 - Use SOMENTE informacoes que estao na frase. NUNCA invente valores, datas, nomes ou numeros. Na duvida, omita o campo.
-- "resumo" e uma frase curta e clara em portugues, para o Felipe ler no card e decidir.
-- Se a frase nao tiver nada acionavel, devolva uma lista vazia.
+- "resumo" e uma frase curta e clara, para o Felipe ler no card e decidir.
 - Hoje e a data fornecida na mensagem. Moeda e sempre CHF (franco suico) — nunca converta.
+- Antes de propor, se a duvida for facil de tirar com uma ferramenta de leitura (ex: "ja tem esse fornecedor cadastrado?"), consulte antes.
 
-CATALOGOS:
-- A mensagem traz as listas de itens de estoque, fornecedores, equipamentos e locais ja cadastrados.
+CATALOGOS (na mensagem, quando relevante):
+- A mensagem pode trazer as listas de itens de estoque, fornecedores, equipamentos e locais ja cadastrados.
 - Ao se referir a um deles, use o NOME EXATO como aparece na lista.
-- Se a frase citar algo que NAO esta na lista, use o nome como foi dito. O app oferece criar o item novo — nao force para o nome parecido mais proximo, e nao invente que ja existe.
+- Se a frase citar algo que NAO esta na lista, use o nome como foi dito — o app oferece criar o item novo.
 
 Area ESTOQUE (stock_movements):
-- Use quando a frase falar que algo acabou, foi usado, sobrou, estragou, ou quando a quantidade mudou.
+- Use SO para o que nao passou pela venda: sobrou, foi usado, estragou, ou contagem fisica.
 - quantity_delta e NEGATIVO para baixa (acabou, usei, perdi, estragou) e POSITIVO para entrada.
-- "acabou o X" sem numero: quantity_delta usando o saldo atual do catalogo (zera o item), reason 'ajuste', e marque incerto=true — voce nao sabe quanto sobrou de verdade.
-- reason: 'compra' (entrou por compra), 'uso' (gastou vendendo), 'perda' (estragou/caiu), 'ajuste' (contagem, correcao).
+- "acabou o X" sem numero: quantity_delta usando o saldo atual (consulte a ferramenta estoque antes, para zerar certo), reason 'ajuste', marque incerto=true.
+- reason: 'compra' (entrou por compra), 'uso' (teste, degustacao, amostra — NUNCA para copo vendido), 'perda' (estragou/caiu), 'ajuste' (contagem, correcao).
 
 Area COMPRA (purchases):
 - Use quando a frase disser que comprou algo. Inclua os itens em "itens".
 - ATENCAO ao numero: "comprei 2,5kg de chocolate por 20" — 2,5 e a quantidade (kg) e 20 e o custo TOTAL em CHF, nao o preco por kg. Quando a frase for ambigua entre preco total e preco unitario, escolha TOTAL e marque incerto=true.
-- Se citar um fornecedor que nao esta no catalogo, ponha em supplier_name mesmo assim — o app oferece cadastrar.
+- Se citar um fornecedor que nao esta no catalogo, ponha em supplier_name mesmo assim.
 - NAO crie tambem uma proposta de ESTOQUE para os itens da compra: aprovar a compra ja movimenta o estoque sozinho.
 
 Area FINANCEIRO (expenses):
 - Despesa/entrada/movimento de caixa que NAO e compra de material (esta e COMPRA) e NAO e venda (venda vive no proprio app).
-- Ex: estacionamento, taxa do local, gasolina, retirada de caixa.
 - type: 'despesa' (saiu), 'entrada' (entrou fora de venda), 'movimento_caixa' (aporte/retirada).
 
 Area PENDENCIA (pendencies):
 - Use para o que ficou pendente, atrasado, faltando, a resolver, a confirmar, a comprar depois.
-- Ex: "a colher nova nao chegou" -> pendencia.
 - critical=true so se a frase indicar que trava a operacao (seguranca, autorizacao, freio, bateria).
 
 Area EQUIPAMENTO (equipment):
 - Use quando a frase falar do estado de um equipamento (freio, bateria, carrinho, gerador, geladeira).
-- status: 'ok', 'issue' (com problema mas funciona), 'broken' (quebrado, nao funciona), 'missing' (sumiu).
-- "o freio continua ruim" -> equipamento, status 'issue', critical=true.
-- Se ja existir no catalogo, use o nome exato e a proposta e de atualizacao de estado.
+- status: 'ok', 'issue' (com problema mas funciona), 'broken' (quebrado), 'missing' (sumiu).
+- Se ja existir no catalogo, use o nome exato — a proposta e de atualizacao de estado.
 
 Area FORNECEDOR (suppliers):
-- Use quando a frase apresentar um fornecedor novo ou der um dado dele (contato, produto).
-- Se o fornecedor aparecer so dentro de uma compra, NAO crie proposta separada — a area COMPRA ja cuida.
+- Se o fornecedor aparecer so dentro de uma compra, NAO crie proposta separada.
 
 Area PRECO (prices):
-- So para o preco de VENDA do proprio Sunbite. item_key: 'cup' (o copo) ou 'topping' (adicional).
-- Preco que o Sunbite PAGOU em algo e COMPRA, nunca PRECO.
+- So para o preco de VENDA do proprio Sunbite. item_key: 'cup' ou 'topping'.
 
 Area LOCAL (places):
-- Local onde a barraca pode vender: praca, mercado, festival, rua.
-- fee e a taxa cobrada pelo local, em CHF.
+- Local onde a barraca pode vender. fee e a taxa cobrada, em CHF.
 
 Area EVENTO (events):
-- Data marcada para vender em um local. starts_at em ISO com hora.
-- place_name: o nome do local (do catalogo, se existir).
-- is_public=true so se a frase disser que pode aparecer no site.
-
-Sempre responda chamando a ferramenta propor_registros.`;
+- Data marcada para vender em um local. starts_at em ISO com hora. is_public=true so se a frase disser que pode aparecer no site.`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -196,7 +337,9 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) return json({ error: "ANTHROPIC_API_KEY nao configurada" }, 500);
 
-    // Client do chamador: valida o JWT e respeita RLS em tudo que ler/escrever.
+    // Client do chamador: valida o JWT e respeita RLS em tudo que ler/escrever
+    // — inclusive nas ferramentas de leitura novas. A funcao nunca le mais do
+    // que o Felipe logado leria sozinho.
     const caller = createClient(SUPABASE_URL, ANON, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -208,10 +351,10 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const texto = String(body?.texto || "").trim();
     const inputMode = body?.modo === "voice" ? "voice" : "text";
+    const lang = body?.lang === "de" ? "de" : "pt";
     if (!texto || texto.length < 3) return json({ error: "Texto muito curto" }, 400);
 
     // Catalogos: a IA escolhe pelo nome, o app resolve para UUID ao aprovar.
-    // Sem isto ela inventaria nomes que nao existem no banco.
     const [stock, suppliers, equipment, places] = await Promise.all([
       caller.from("stock_items").select("name, unit, quantity"),
       caller.from("suppliers").select("name, product"),
@@ -220,7 +363,7 @@ Deno.serve(async (req) => {
     ]);
 
     const catalogo = [
-      `Itens de estoque (nome | unidade | saldo atual): ${
+      `Itens de estoque (nome | unidade | saldo bruto): ${
         (stock.data || []).map((r: any) => `${r.name} | ${r.unit} | ${r.quantity}`).join(" ;; ") || "(vazio)"
       }`,
       `Fornecedores (nome | produto): ${
@@ -236,55 +379,96 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+    const messages: any[] = [
+      {
+        role: "user",
+        content: `Data de hoje: ${today}.\n\nCATALOGOS JA CADASTRADOS:\n${catalogo}\n\nMENSAGEM:\n${texto}`,
       },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 2048,
-        system: SYSTEM_PROMPT,
-        tools: [TOOL],
-        tool_choice: { type: "tool", name: "propor_registros" },
-        messages: [
-          {
-            role: "user",
-            content: `Data de hoje: ${today}.\n\nCATALOGOS JA CADASTRADOS:\n${catalogo}\n\nFRASE:\n${texto}`,
-          },
-        ],
-      }),
-    });
+    ];
 
-    // Grava a mensagem antes de qualquer proposta: se a IA falhar, o log
-    // guarda o que foi dito e o erro — e o que permite corrigir o prompt.
+    let replyText = "";
+    let propostas: any[] = [];
+    let lastRawContent: any = null;
+    let httpError: string | null = null;
+
+    // Loop de ferramentas: no maximo 4 idas e vindas com a API, para nao
+    // deixar a IA presa consultando para sempre. Uma pergunta normal resolve
+    // em 1-2 voltas (consulta, depois responde).
+    for (let turn = 0; turn < 4; turn++) {
+      const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 2048,
+          system: systemPrompt(lang),
+          tools: [...READ_TOOLS, PROPOR_TOOL],
+          messages,
+        }),
+      });
+
+      if (!aiResp.ok) {
+        httpError = `HTTP ${aiResp.status}: ${await aiResp.text()}`;
+        break;
+      }
+
+      const aiData = await aiResp.json();
+      lastRawContent = aiData.content;
+
+      const textBlocks = (aiData.content || []).filter((c: any) => c.type === "text").map((c: any) => c.text);
+      if (textBlocks.length > 0) replyText = (replyText ? replyText + "\n" : "") + textBlocks.join("\n");
+
+      const toolUses = (aiData.content || []).filter((c: any) => c.type === "tool_use");
+      if (toolUses.length === 0) break; // resposta final em texto, sem ferramenta
+
+      const proporCall = toolUses.find((tc: any) => tc.name === "propor_registros");
+      if (proporCall?.input?.propostas) propostas = proporCall.input.propostas;
+
+      const readCalls = toolUses.filter((tc: any) => tc.name !== "propor_registros");
+      if (readCalls.length === 0) break; // so propor_registros — terminal, nao precisa voltar
+
+      // Continua o loop: executa as leituras e devolve o resultado para a IA.
+      messages.push({ role: "assistant", content: aiData.content });
+      const toolResults = await Promise.all(
+        readCalls.map(async (tc: any) => ({
+          type: "tool_result",
+          tool_use_id: tc.id,
+          content: JSON.stringify(await runReadTool(tc.name, tc.input, caller)),
+        })),
+      );
+      if (proporCall) {
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: proporCall.id,
+          content: "Registrado como proposta, aguardando decisao do Felipe.",
+        });
+      }
+      messages.push({ role: "user", content: toolResults });
+    }
+
+    // Grava a mensagem sempre — sucesso ou falha. E o log que permite
+    // corrigir o prompt e ver por que a IA respondeu o que respondeu.
     const { data: msg, error: msgErr } = await caller
       .from("ai_messages")
       .insert({
         input_text: texto,
         input_mode: inputMode,
         model: MODEL,
+        reply_text: replyText || null,
+        raw_response: lastRawContent,
         created_by: userId,
-        error: aiResp.ok ? null : `HTTP ${aiResp.status}`,
+        error: httpError,
       })
       .select("id")
       .single();
     if (msgErr) return json({ error: "Falha ao registrar a mensagem", detail: msgErr.message }, 500);
 
-    if (!aiResp.ok) {
-      const errText = await aiResp.text();
-      return json({ error: "Falha na IA", detail: errText }, 502);
-    }
+    if (httpError) return json({ error: "Falha na IA", detail: httpError }, 502);
 
-    const aiData = await aiResp.json();
-    const toolUse = (aiData.content || []).find((c: any) => c.type === "tool_use");
-    if (!toolUse?.input) return json({ error: "IA nao retornou propostas" }, 502);
-
-    await caller.from("ai_messages").update({ raw_response: toolUse.input }).eq("id", msg.id);
-
-    const propostas = Array.isArray(toolUse.input.propostas) ? toolUse.input.propostas : [];
     const rows = propostas
       .map((p: any) => {
         const table = AREA_TO_TABLE[p?.area];
@@ -303,7 +487,7 @@ Deno.serve(async (req) => {
       })
       .filter(Boolean);
 
-    if (rows.length === 0) return json({ message_id: msg.id, cards: [] });
+    if (rows.length === 0) return json({ message_id: msg.id, reply_text: replyText, cards: [] });
 
     const { data: saved, error: saveErr } = await caller
       .from("ai_suggestions")
@@ -311,7 +495,7 @@ Deno.serve(async (req) => {
       .select("*");
     if (saveErr) return json({ error: "Falha ao gravar propostas", detail: saveErr.message }, 500);
 
-    return json({ message_id: msg.id, cards: saved });
+    return json({ message_id: msg.id, reply_text: replyText, cards: saved });
   } catch (e: any) {
     return json({ error: e?.message ?? String(e) }, 500);
   }
