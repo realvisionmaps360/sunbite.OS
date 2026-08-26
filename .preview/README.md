@@ -19,3 +19,21 @@ sozinho o quarto "?" da tela e fotografar a caixinha do tutorial.
 
 Os números são o pior caso de largura de propósito: `CHF 1234.50` em todas as
 linhas, que é a combinação mais larga que o app consegue produzir.
+
+## Telas cobertas
+
+`?screen=finance` (padrão), `?screen=stock`, `?screen=ai`.
+
+## ⚠️ Mock que mente não é portão
+
+Na Fatia 6 o `order()` do mock do Supabase era **no-op**. Resultado: um chat fora de ordem
+passaria no portão sem ninguém notar. Depois de fazê-lo ordenar de verdade, a ordem errada
+apareceu na hora.
+
+Também faltavam `maybeSingle`, `update` e `ilike`, e o `insert()` não devolvia a linha
+criada — o que fazia *aprovar um card* estourar aqui por um motivo que **não existe em
+produção** (no Supabase de verdade, `insert().select().single()` devolve a linha, ou devolve
+erro; nunca devolve `{data: null, error: null}`).
+
+Então: quando o preview acusar erro, a primeira pergunta é **"o mock sabe fazer isto?"**.
+A resposta certa é ensiná-lo, nunca contornar o teste.
