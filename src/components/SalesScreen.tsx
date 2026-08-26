@@ -1,12 +1,12 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { TOPPINGS, money } from "../config";
-import { allSales, cancelSale, today } from "../db";
+import { allSales, cancelSale, correctSale, today } from "../db";
 import { LangToggle, useLang } from "../i18n";
 import { byDay, shortDate, summarize, toppingRanking } from "../sales";
 import { syncNow } from "../sync";
 import { Valor } from "./Valor";
-import { isActive, type Sale } from "../types";
+import { isActive, isCorrected, type Payment, type Sale } from "../types";
 
 type Tab = "today" | "days" | "summary";
 
@@ -21,6 +21,7 @@ export function SalesScreen({
   const [sales, setSales] = useState<Sale[]>([]);
   const [tab, setTab] = useState<Tab>("today");
   const [asking, setAsking] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState<string | null>(null);
 
   const load = useCallback(async () => setSales(await allSales()), []);
 
@@ -28,20 +29,34 @@ export function SalesScreen({
     void load();
   }, [load]);
 
-  async function handleCancel(id: string) {
-    await cancelSale(id);
-    setAsking(null);
+  /**
+   * Leva a mudança ao Supabase agora, sem esperar o ciclo de 2 minutos:
+   * correção que fica dois minutos só no celular é correção que pode se
+   * perder junto com o aparelho.
+   */
+  const empurrar = useCallback(async () => {
     await load(); // números se refazem na hora
-
-    // Leva o cancelamento ao Supabase agora, sem esperar o ciclo de 2 minutos:
-    // correção que fica dois minutos só no celular é correção que pode se perder
-    // junto com o aparelho.
     void syncNow().then(async (r) => {
       if (r.ok && r.sent > 0) {
         await load();
         onDataChanged();
       }
     });
+  }, [load, onDataChanged]);
+
+  async function handleCancel(id: string) {
+    await cancelSale(id);
+    setAsking(null);
+    await empurrar();
+  }
+
+  async function handleCorrect(
+    id: string,
+    patch: { total: number; payment: Payment; reason: string },
+  ) {
+    await correctSale(id, patch);
+    setCorrecting(null);
+    await empurrar();
   }
 
   // Veio da esquerda: para dispensar, empurra de volta para a esquerda.
@@ -88,6 +103,9 @@ export function SalesScreen({
           asking={asking}
           onAsk={setAsking}
           onCancel={handleCancel}
+          correcting={correcting}
+          onCorrectStart={setCorrecting}
+          onCorrect={handleCorrect}
         />
       )}
       {tab === "days" && <DaysTab sales={sales} />}
@@ -103,11 +121,20 @@ function TodayTab({
   asking,
   onAsk,
   onCancel,
+  correcting,
+  onCorrectStart,
+  onCorrect,
 }: {
   rows: Sale[];
   asking: string | null;
   onAsk: (id: string | null) => void;
   onCancel: (id: string) => void;
+  correcting: string | null;
+  onCorrectStart: (id: string | null) => void;
+  onCorrect: (
+    id: string,
+    patch: { total: number; payment: Payment; reason: string },
+  ) => void;
 }) {
   const { t } = useLang();
   const ativas = rows.filter(isActive);
@@ -169,6 +196,13 @@ function TodayTab({
                   >
                     {money(s.total)}
                   </p>
+                  {/* O valor de antes fica legível ao lado: é o que separa
+                      "corrigir" de "sumir com dinheiro". */}
+                  {isCorrected(s) && s.original_total !== undefined && (
+                    <p className="text-xs tabular-nums text-ink-muted line-through">
+                      {t("sale.correctedFrom", { value: money(s.original_total) })}
+                    </p>
+                  )}
                   <p className="text-xs text-ink-muted">
                     {cancelada
                       ? t("sale.cancelled")
@@ -177,7 +211,34 @@ function TodayTab({
                 </div>
               </div>
 
+              {isCorrected(s) && !cancelada && (
+                <p className="mt-1 text-sm text-brand">
+                  ✎ {t("sale.corrected")} · {s.correction_reason}
+                </p>
+              )}
+
+              {!cancelada && correcting === s.id && (
+                <CorrectForm
+                  sale={s}
+                  onCancel={() => onCorrectStart(null)}
+                  onSave={(patch) => onCorrect(s.id, patch)}
+                />
+              )}
+
               {!cancelada &&
+                correcting !== s.id &&
+                !isCorrected(s) &&
+                asking !== s.id && (
+                  <button
+                    onClick={() => onCorrectStart(s.id)}
+                    className="mt-2 mr-4 text-sm text-ink-muted underline underline-offset-4"
+                  >
+                    {t("sale.correct")}
+                  </button>
+                )}
+
+              {!cancelada &&
+                correcting !== s.id &&
                 (asking === s.id ? (
                   <div className="mt-3 flex items-center gap-2">
                     <span className="flex-1 text-sm font-semibold text-brand">
@@ -209,6 +270,94 @@ function TodayTab({
         })}
       </ul>
     </>
+  );
+}
+
+/**
+ * Corrigir venda (Fatia 3 da V2, decisao 8 / PRD 6.3).
+ *
+ * Muda so o valor e a forma de pagamento — os copos ficam como foram
+ * registrados. O que a Romana erra no balcao e o numero e o botao de
+ * pagamento; refazer o pedido inteiro custaria mais toques e mexeria no
+ * ranking de toppings retroativamente.
+ *
+ * Motivo obrigatorio: sem ele, "corrigir" seria so uma forma educada de
+ * reescrever o faturamento.
+ */
+function CorrectForm({
+  sale,
+  onCancel,
+  onSave,
+}: {
+  sale: Sale;
+  onCancel: () => void;
+  onSave: (patch: { total: number; payment: Payment; reason: string }) => void;
+}) {
+  const { t } = useLang();
+  const [total, setTotal] = useState(sale.total.toFixed(2));
+  const [payment, setPayment] = useState<Payment>(sale.payment);
+  const [reason, setReason] = useState("");
+
+  const valor = Number(total);
+  const podeSalvar = Number.isFinite(valor) && valor >= 0 && reason.trim().length > 0;
+
+  return (
+    <div className="mt-3 space-y-3 rounded-2xl bg-cream p-3">
+      <p className="font-display text-lg">{t("sale.correctTitle")}</p>
+
+      <label className="block text-sm font-semibold">{t("sale.correctValue")}</label>
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.5"
+        value={total}
+        onChange={(e) => setTotal(e.target.value)}
+        className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-3 text-xl tabular-nums"
+      />
+
+      <label className="block text-sm font-semibold">{t("sale.correctPayment")}</label>
+      <div className="flex gap-2">
+        {(["cash", "twint"] as Payment[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPayment(p)}
+            className={`flex-1 rounded-2xl border-2 py-3 font-semibold transition ${
+              payment === p
+                ? "border-brand bg-brand text-cream"
+                : "border-black/15 text-ink-muted"
+            }`}
+          >
+            {p === "cash" ? "💵" : "📱"} {t(p === "cash" ? "pay.cash" : "pay.twint")}
+          </button>
+        ))}
+      </div>
+
+      <label className="block text-sm font-semibold">{t("sale.correctReason")}</label>
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder={t("sale.correctReasonPlaceholder")}
+        className="w-full rounded-lg border border-black/10 bg-cream-soft px-3 py-2"
+      />
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => onSave({ total: valor, payment, reason: reason.trim() })}
+          disabled={!podeSalvar}
+          className="flex-1 rounded-2xl bg-brand py-3 font-semibold text-cream disabled:opacity-40"
+        >
+          {t("sale.correctSave")}
+        </button>
+        <button
+          onClick={onCancel}
+          className="rounded-2xl border border-black/20 px-4 text-lg"
+        >
+          ×
+        </button>
+      </div>
+
+      <p className="text-xs text-ink-muted">{t("sale.correctOnce")}</p>
+    </div>
   );
 }
 

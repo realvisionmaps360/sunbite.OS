@@ -50,6 +50,9 @@ function row(s: Sale) {
     operation_id: s.operation_id ?? null,
     cancelled: s.cancelled ?? false,
     cancelled_at: s.cancelled_at ?? null,
+    original_total: s.original_total ?? null,
+    correction_reason: s.correction_reason ?? null,
+    corrected_at: s.corrected_at ?? null,
   };
 }
 
@@ -92,7 +95,10 @@ async function sendOne(cfg: SupabaseConfig, sale: Sale): Promise<void> {
     throw new Error(erro?.message ?? `HTTP ${insert.status}`);
   }
 
-  // Ja estava la. Atualiza o que mudou desde entao.
+  // Ja estava la. Atualiza o que mudou desde entao: o cancelamento e, desde
+  // a Fatia 3, a correcao. O aparelho sempre manda o estado inteiro dessas
+  // colunas, nunca so o que acabou de mudar — assim cancelar uma venda ja
+  // corrigida reenvia a correcao junto, em vez de apaga-la no servidor.
   const patch = await fetch(
     `${cfg.url}/rest/v1/sales?id=eq.${encodeURIComponent(sale.id)}`,
     {
@@ -101,6 +107,11 @@ async function sendOne(cfg: SupabaseConfig, sale: Sale): Promise<void> {
       body: JSON.stringify({
         cancelled: sale.cancelled ?? false,
         cancelled_at: sale.cancelled_at ?? null,
+        total: sale.total,
+        payment: sale.payment,
+        original_total: sale.original_total ?? null,
+        correction_reason: sale.correction_reason ?? null,
+        corrected_at: sale.corrected_at ?? null,
       }),
     },
   );

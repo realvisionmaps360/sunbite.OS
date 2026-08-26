@@ -153,6 +153,65 @@ cancelar marca a venda como nao sincronizada e dispara o envio.
 A unica coisa que apaga de verdade e o botao vermelho no fim dos Ajustes, e ele so
 alcanca **o dia corrente**. Serve para tirar os testes antes de abrir a temporada.
 
+## Corrigir venda (Fatia 3 da V2)
+
+Cancelar tira a venda inteira dos totais. Quando o erro foi so o **valor digitado** ou o
+**botao de pagamento**, isso destroi informacao boa junto com a ruim — dai o "Corrigir"
+ao lado do "Cancelar" na lista de Vendas.
+
+Corrigir muda `total` e `payment`, guarda o valor de antes em `original_total`, exige um
+**motivo escrito** e carimba `corrected_at`. Os copos ficam como foram registrados: o que
+se erra no balcao e o numero e o botao, e refazer o pedido inteiro custaria mais toques e
+mexeria no ranking de toppings retroativamente.
+
+**Uma correcao por venda.** A policy do banco so aceita a transicao de `corrected_at`
+nulo para nao nulo. Errou duas vezes, cancela — assim "corrigir" nunca vira uma forma
+educada de reescrever o faturamento aos poucos.
+
+A correcao viaja pelo **mesmo caminho anonimo do cancelamento** (`sync.ts`), e nao pela
+fila autenticada: corrigir precisa funcionar no celular, na hora, sem internet e sem
+login. Se fosse pela fila, uma correcao feita deslogada ficaria presa para sempre com o
+servidor guardando o valor errado.
+
+`sales.ts` e a view `v_finance_daily` **nao mudaram**: as duas leem `total`, que passa a
+ser o valor corrigido.
+
+## Ocorrencia sem sair do PDV
+
+O botao `＋⚠︎` no cabecalho da tela de venda abre uma folha curta — o que aconteceu, se e
+critica, registrar — e devolve na hora o pedido em aberto. Grava na tabela `pendencies`,
+que ja existia, pela fila offline do `outbox`.
+
+Duas coisas nao podem ser trocadas de lugar aqui:
+
+- **A folha entra por `lazy()` em `App.tsx`.** `outbox.ts` importa `./supabase`, e o
+  caminho da venda nao pode carregar essa biblioteca. E a separacao em pedacos, nao um
+  `if`, que mantem "vender nao depende de login".
+- **Quem espera e a ocorrencia, nunca a venda.** Se a fila falhar, a folha fecha do mesmo
+  jeito e o pedido continua intacto.
+
+## Fechar a caixa com motivo
+
+O fechamento deixou de gravar so o dinheiro contado. Agora mostra **esperado × contado ×
+diferenca** (PRD V2 §7.3):
+
+```
+inicial + vendas em dinheiro + entradas - despesas + movimentos de caixa
+```
+
+TWINT fica de fora de proposito — nao passa pela caixa fisica, aparece so ao lado.
+"Retirada" nao tem tipo proprio: e um `movimento_caixa` com valor negativo.
+
+Diferenca diferente de zero **trava o botao** ate haver um motivo escrito, e o motivo vira
+lancamento no Financeiro amarrado a operacao — `type: movimento_caixa`, `category:
+ajuste`. Nao e um tipo `ajuste` proprio porque o `check` de `expenses` so aceita tres
+tipos, e criar um quarto exigiria alterar uma restricao de tabela em producao; o efeito e
+o mesmo e `v_finance_daily` ja soma isso.
+
+Essa e a **unica** confirmacao do app inteiro. Em qualquer outro lugar, velocidade ganha:
+a protecao e desfazer depois, nunca perguntar antes. Aqui o dinheiro ja acabou de ser
+contado, e nao ha "depois".
+
 ## Como funciona offline
 
 A venda e gravada no **IndexedDB do celular** antes de qualquer coisa. Internet nunca

@@ -123,6 +123,38 @@ export async function cancelSale(id: string) {
 }
 
 /**
+ * Corrige o valor e/ou a forma de pagamento de uma venda (Fatia 3 da V2).
+ *
+ * Espelha `cancelSale` de proposito: grava e volta `synced` para false, para
+ * que o PATCH de sync.ts leve a correcao ao servidor. A diferenca e que aqui
+ * a venda continua contando — `total` passa a ser o valor certo, e o valor
+ * de antes fica em `original_total`.
+ *
+ * Uma so vez por venda: com `corrected_at` ja gravado, a policy do banco
+ * recusaria a segunda correcao, entao nem chega a tentar. Errou de novo,
+ * cancela.
+ */
+export async function correctSale(
+  id: string,
+  patch: { total: number; payment: Sale["payment"]; reason: string },
+) {
+  const d = await db();
+  const s = (await d.get(STORE, id)) as Sale | undefined;
+  if (!s || s.cancelled || s.corrected_at) return;
+  await d.put(STORE, {
+    ...s,
+    // Guarda o valor de antes, nunca o de duas correcoes atras: como so
+    // existe uma correcao por venda, `s.total` aqui e sempre o original.
+    original_total: s.total,
+    total: patch.total,
+    payment: patch.payment,
+    correction_reason: patch.reason,
+    corrected_at: new Date().toISOString(),
+    synced: false,
+  });
+}
+
+/**
  * Apaga as vendas de hoje. Serve para limpar teste antes de abrir a temporada.
  * So mexe no dia corrente — historico de dias anteriores fica fora de alcance.
  */

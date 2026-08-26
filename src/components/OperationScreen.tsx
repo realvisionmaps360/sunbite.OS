@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ensureFreshSession, useAuth, type Identity } from "../auth";
 import { today } from "../db";
+import { money } from "../config";
 import { useLang } from "../i18n";
 import { flushOutbox, queueWrite } from "../outbox";
-import { AdminHeader } from "./ui";
+import { AdminHeader, TileButton } from "./ui";
 import {
   cacheOpenOperationView,
   phaseFor,
@@ -17,6 +18,7 @@ import { subscribeRealtime } from "../realtime";
 import { getSupabase } from "../supabase";
 import type { Place, SunbiteEvent } from "../types";
 import LoginScreen from "./LoginScreen";
+import { OccurrenceSheet } from "./OccurrenceSheet";
 
 /** yyyymmddThhmmssZ, como o Google Calendar exige na URL de "adicionar evento". */
 function toGCalStamp(iso: string): string {
@@ -42,6 +44,63 @@ function googleCalendarUrl(ev: SunbiteEvent, lang: "pt" | "de", place: Place | n
 }
 
 const PHASES: Phase[] = ["preparacao", "saida", "operacao", "encerramento"];
+
+/**
+ * Caixa esperado no fechamento (PRD 7.3):
+ *
+ *   inicial + vendas em dinheiro + entradas - despesas + movimentos de caixa
+ *
+ * TWINT fica fora de proposito (7.4): nao passa pela caixa fisica, entao
+ * some do calculo e aparece so como informacao ao lado. "Retirada" nao tem
+ * tipo proprio — e um `movimento_caixa` com valor negativo, por isso entra
+ * somando.
+ *
+ * Este calculo vive aqui, e nao em operations.ts, porque precisa do cliente
+ * autenticado: operations.ts e importado por App.tsx e nao pode arrastar
+ * ./supabase para o pacote da venda.
+ */
+interface CashExpectation {
+  initial: number;
+  cashSales: number;
+  twintSales: number;
+  entries: number;
+  costs: number;
+  movements: number;
+  expected: number;
+}
+
+function expectedCash(
+  operation: Operation,
+  sales: { total: number; payment: string; cancelled: boolean }[],
+  expenses: { type: string; value: number }[],
+): CashExpectation {
+  const ativas = sales.filter((s) => !s.cancelled);
+  const soma = (xs: { value: number }[]) => xs.reduce((a, x) => a + Number(x.value), 0);
+
+  const initial = Number(operation.cash_initial ?? 0);
+  const cashSales = ativas
+    .filter((s) => s.payment === "cash")
+    .reduce((a, s) => a + Number(s.total), 0);
+  const twintSales = ativas
+    .filter((s) => s.payment === "twint")
+    .reduce((a, s) => a + Number(s.total), 0);
+  const entries = soma(expenses.filter((e) => e.type === "entrada"));
+  const costs = soma(expenses.filter((e) => e.type === "despesa"));
+  const movements = soma(expenses.filter((e) => e.type === "movimento_caixa"));
+
+  return {
+    initial,
+    cashSales,
+    twintSales,
+    entries,
+    costs,
+    movements,
+    expected: initial + cashSales + entries - costs + movements,
+  };
+}
+
+/** Arredonda para o rappen antes de comparar — 0.1 + 0.2 nao pode travar o fechamento. */
+const rappen = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Tela de Operacao (Etapa 6) — exige sessao, por isso entra no barril
@@ -87,8 +146,10 @@ function OperationBody({
   const [tab, setTab] = useState<Phase>("preparacao");
   const [cashInitial, setCashInitial] = useState("");
   const [cashFinal, setCashFinal] = useState("");
-  const [newPendency, setNewPendency] = useState("");
-  const [newPendencyCritical, setNewPendencyCritical] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [occurrence, setOccurrence] = useState(false);
+  /** Caixa esperado (PRD 7.3) — nulo enquanto nao deu para calcular. */
+  const [expected, setExpected] = useState<CashExpectation | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -117,8 +178,26 @@ function OperationBody({
           .select("*")
           .eq("operation_id", current.id);
         if (st) setStates(st as ChecklistStateRow[]);
+
+        // Caixa esperado: le o que ja existe nas duas tabelas, sem redigitar
+        // nada. Venda cancelada nao entra — a mesma regra do resto do app.
+        const [{ data: sl }, { data: ex }] = await Promise.all([
+          supabase
+            .from("sales")
+            .select("total,payment,cancelled")
+            .eq("operation_id", current.id),
+          supabase.from("expenses").select("type,value").eq("operation_id", current.id),
+        ]);
+        setExpected(
+          expectedCash(
+            current,
+            (sl as { total: number; payment: string; cancelled: boolean }[]) ?? [],
+            (ex as { type: string; value: number }[]) ?? [],
+          ),
+        );
       } else {
         setStates([]);
+        setExpected(null);
       }
 
       const { data: pend } = await supabase
@@ -236,37 +315,56 @@ function OperationBody({
     await queueWrite("operations", patch);
   }
 
+  /**
+   * Fecha a operacao (decisao 7). A diferenca entre o caixa esperado e o
+   * contado nao pode morrer numa coluna: vira lancamento no Financeiro,
+   * amarrado a esta operacao, com o motivo escrito pela Romana.
+   *
+   * O tipo e `movimento_caixa` com categoria `ajuste`, e nao um tipo
+   * `ajuste` proprio: o check de `expenses` so aceita tres tipos, e criar um
+   * quarto exigiria alterar uma restricao de tabela em producao. O efeito e
+   * o mesmo, e `v_finance_daily` ja soma isso sem alteracao nenhuma.
+   */
   async function closeOperation() {
     if (!operation) return;
+    const contado = cashFinal ? Number(cashFinal) : null;
+    const diff = diferenca;
+
+    if (diff !== null && diff !== 0 && !closeReason.trim()) return;
+
     const patch = {
       id: operation.id,
       status: "closed" as const,
       closed_by: identity.userId,
       closed_at: new Date().toISOString(),
-      cash_final: cashFinal ? Number(cashFinal) : null,
+      cash_final: contado,
     };
     setOperation({ ...operation, ...patch });
     await queueWrite("operations", patch);
+
+    if (diff !== null && diff !== 0) {
+      try {
+        const supabase = await getSupabase();
+        await supabase.from("expenses").insert({
+          type: "movimento_caixa",
+          category: "ajuste",
+          description: closeReason.trim(),
+          value: diff,
+          occurred_at: operation.local_date,
+          operation_id: operation.id,
+          created_by: identity.userId,
+        });
+      } catch {
+        // Sem rede na hora do fechamento: a operacao ja fechou pela fila, e o
+        // ajuste fica registrado no motivo. Nao vale travar o encerramento.
+      }
+      setCloseReason("");
+    }
   }
 
-  async function addPendency() {
-    if (!newPendency.trim()) return;
-    const row: Pendency = {
-      id: crypto.randomUUID(),
-      description: newPendency.trim(),
-      critical: newPendencyCritical,
-      status: "aberta",
-      origin: operation ? `operacao:${operation.id}` : null,
-      operation_id: operation?.id ?? null,
-      created_by: identity.userId,
-      created_at: new Date().toISOString(),
-      resolved_by: null,
-      resolved_at: null,
-    };
+  /** Chega pronta da folha de Ocorrencia — aqui so entra na lista da tela. */
+  function onOccurrenceSaved(row: Pendency) {
     setPendencies((prev) => [row, ...prev]);
-    setNewPendency("");
-    setNewPendencyCritical(false);
-    await queueWrite("pendencies", row);
   }
 
   async function resolvePendency(p: Pendency) {
@@ -279,6 +377,14 @@ function OperationBody({
     setPendencies((prev) => prev.filter((x) => x.id !== p.id));
     await queueWrite("pendencies", patch);
   }
+
+  const contado = cashFinal.trim() === "" ? null : Number(cashFinal);
+  /** Nulo enquanto nao da para comparar — sem esperado ou sem contado. */
+  const diferenca =
+    expected && contado !== null && Number.isFinite(contado)
+      ? rappen(contado - expected.expected)
+      : null;
+  const precisaMotivo = diferenca !== null && diferenca !== 0;
 
   const phaseTemplates = templates.filter((tp) => tp.phase === tab);
   const stateByTemplate = new Map(states.map((s) => [s.template_id, s]));
@@ -452,49 +558,88 @@ function OperationBody({
             )}
 
             {tab === "encerramento" && operation.status === "open" && (
-              <div className="space-y-2">
+              <div className="space-y-3 rounded-2xl bg-cream p-4">
+                <h2 className="font-display text-xl">{t("close.title")}</h2>
+
                 <label className="block text-sm font-semibold">{t("operation.cashFinal")}</label>
                 <input
                   type="number"
                   inputMode="decimal"
                   value={cashFinal}
                   onChange={(e) => setCashFinal(e.target.value)}
-                  className="w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
+                  className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-3 text-xl tabular-nums"
                 />
+
+                {expected && (
+                  <div className="space-y-1">
+                    {/* Esperado × contado × diferenca (PRD 7.3). Cada linha e
+                        uma grade de duas colunas: o valor nunca disputa
+                        largura com o rotulo. */}
+                    <Linha label={t("close.expected")} value={money(expected.expected)} />
+                    <Linha
+                      label={t("close.counted")}
+                      value={contado === null ? "—" : money(contado)}
+                    />
+                    <Linha
+                      label={t("close.difference")}
+                      value={diferenca === null ? "—" : money(diferenca)}
+                      destaque={precisaMotivo}
+                    />
+                    <p className="pt-1 text-xs text-ink-muted">
+                      {t("close.breakdown", {
+                        initial: money(expected.initial),
+                        sales: money(expected.cashSales),
+                      })}
+                      {(expected.entries || expected.costs || expected.movements) !== 0 &&
+                        ` · ${t("close.adjustments", {
+                          value: money(
+                            expected.entries - expected.costs + expected.movements,
+                          ),
+                        })}`}
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      {t("close.twintNote", { value: money(expected.twintSales) })}
+                    </p>
+                  </div>
+                )}
+
+                {precisaMotivo && (
+                  <>
+                    <label className="block text-sm font-semibold">{t("close.reason")}</label>
+                    <input
+                      value={closeReason}
+                      onChange={(e) => setCloseReason(e.target.value)}
+                      placeholder={t("close.reasonPlaceholder")}
+                      className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
+                    />
+                    {!closeReason.trim() && (
+                      <p className="text-sm font-semibold text-red-800">
+                        {t("close.reasonRequired")}
+                      </p>
+                    )}
+                  </>
+                )}
+
                 <button
                   onClick={() => void closeOperation()}
-                  className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream"
+                  disabled={precisaMotivo && !closeReason.trim()}
+                  className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream disabled:opacity-40"
                 >
-                  {t("operation.close")}
+                  {t("close.confirm")}
                 </button>
               </div>
             )}
 
             <section className="space-y-3">
               <h2 className="font-display text-xl">{t("pendency.title")}</h2>
-              <div className="flex gap-2">
-                <input
-                  value={newPendency}
-                  onChange={(e) => setNewPendency(e.target.value)}
-                  placeholder={t("pendency.placeholder")}
-                  className="flex-1 rounded-lg border border-black/20 bg-cream px-3 py-2"
-                />
-                <button
-                  onClick={() => void addPendency()}
-                  disabled={!newPendency.trim()}
-                  className="rounded-lg bg-brand px-4 py-2 font-semibold text-cream disabled:opacity-40"
-                >
-                  {t("pendency.add")}
-                </button>
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={newPendencyCritical}
-                  onChange={(e) => setNewPendencyCritical(e.target.checked)}
-                />
-                {t("pendency.critical")}
-              </label>
+              {/* Mesma folha que abre de dentro do PDV — um caminho so para
+                  registrar ocorrencia, aqui e la. */}
+              <TileButton
+                emoji="⚠️"
+                label={t("pendency.add")}
+                variant="dashed"
+                onClick={() => setOccurrence(true)}
+              />
 
               <ul className="divide-y divide-black/10 rounded-2xl bg-cream">
                 {pendencies.length === 0 && (
@@ -523,6 +668,41 @@ function OperationBody({
           </div>
         </>
       )}
+
+      {occurrence && (
+        <OccurrenceSheet
+          onClose={() => setOccurrence(false)}
+          createdBy={identity.userId}
+          onSaved={onOccurrenceSaved}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Linha rotulo × valor do fechamento. Grade de duas colunas: o valor tem
+ *  largura propria e nunca briga com o rotulo, mesmo em CHF 1234.50. */
+function Linha({
+  label,
+  value,
+  destaque,
+}: {
+  label: string;
+  value: string;
+  destaque?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className={`text-sm ${destaque ? "font-semibold text-red-800" : "text-ink-muted"}`}>
+        {label}
+      </span>
+      <span
+        className={`shrink-0 tabular-nums ${
+          destaque ? "font-semibold text-red-800" : "font-semibold"
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

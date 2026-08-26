@@ -48,6 +48,12 @@ import type { Payment, Sale } from "./types";
 // nao entra no barril adminScreens.ts — tem seu proprio lazy() aqui.
 const SystemScreen = lazy(() => import("./components/SystemScreen"));
 
+// A folha de Ocorrencia (Fatia 3) grava pela fila do outbox, que importa
+// ./supabase. Entra por lazy() pelo mesmo motivo das telas administrativas:
+// assim a biblioteca so baixa quando a folha abre, e o pacote do caminho da
+// venda continua sem ela.
+const OccurrenceSheet = lazy(() => import("./components/OccurrenceSheet"));
+
 export type Screen =
   | "home"
   | "sale"
@@ -144,6 +150,7 @@ export default function App() {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
+  const [occurrence, setOccurrence] = useState(false);
   const errorTimer = useRef<number | undefined>(undefined);
   // Marca se a ultima tentativa de sync falhou, so para saber quando logar
   // a RECUPERACAO (Etapa 5) — nao muda syncNow() nem o que ele retorna.
@@ -196,6 +203,10 @@ export default function App() {
    * de fechar já faz, para o hardware nunca divergir do toque.
    */
   const goBack = useCallback(() => {
+    if (occurrence) {
+      setOccurrence(false);
+      return;
+    }
     if (confirmation) {
       setConfirmation(null);
       return;
@@ -235,7 +246,7 @@ export default function App() {
         // Na raiz, deixa o botão físico agir normal (sai do app).
         return;
     }
-  }, [screen, confirmation, error]);
+  }, [screen, confirmation, error, occurrence]);
 
   useEffect(() => {
     const onPopState = () => goBack();
@@ -334,7 +345,17 @@ export default function App() {
         >
           🏠
         </button>
-        <div className="flex items-center gap-3">
+        {/* Ocorrencia sem sair do PDV (PRD 6.4): salva e devolve na hora o
+            pedido em aberto. Discreto de proposito — a mao que atende nao
+            pode esbarrar nele. */}
+        <button
+          onClick={() => setOccurrence(true)}
+          aria-label={t("pendency.short")}
+          className="rounded-lg px-2 py-1 text-lg leading-none opacity-70"
+        >
+          ＋⚠︎
+        </button>
+        <div className="ml-auto flex items-center gap-3">
           {/* Sem Supabase configurado, "pendente" não quer dizer nada — vira um
               alarme permanente. Nesse caso o app só diz onde a venda está. */}
           <span className="whitespace-nowrap text-[11px]">
@@ -458,6 +479,16 @@ export default function App() {
               <Tela onClose={voltarHome} />
             </LazyScreen>
           ),
+      )}
+
+      {/* Falha ao carregar a folha nao pode aparecer por cima do pedido: cai
+          em nada e a venda segue. */}
+      {occurrence && (
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <OccurrenceSheet onClose={() => setOccurrence(false)} />
+          </Suspense>
+        </ErrorBoundary>
       )}
 
       <SaleConfirmation

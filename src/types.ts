@@ -28,7 +28,24 @@ export interface Sale {
    */
   cancelled?: boolean;
   cancelled_at?: string;
+
+  /**
+   * Correcao (Fatia 3 da V2). `total` e `payment` passam a valer o valor
+   * corrigido — e por isso que sales.ts e a view v_finance_daily continuam
+   * certos sem alteracao nenhuma. O que existia antes fica em
+   * `original_total`, legivel ao lado na lista.
+   *
+   * Uma correcao por venda, por decisao: a policy do banco so aceita a
+   * transicao de `corrected_at` nulo para nao nulo. Errou duas vezes,
+   * cancela.
+   */
+  original_total?: number;
+  correction_reason?: string;
+  corrected_at?: string;
 }
+
+/** Venda que teve valor ou forma de pagamento corrigidos. */
+export const isCorrected = (s: Sale) => Boolean(s.corrected_at);
 
 /** Venda que conta para o caixa. */
 export const isActive = (s: Sale) => !s.cancelled;

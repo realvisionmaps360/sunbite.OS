@@ -1153,3 +1153,48 @@ as $$
    where status = 'pending'
      and created_at < now() - interval '30 days';
 $$;
+
+
+-- ============================================================================
+-- Fatia 3 da V2 — corrigir venda
+-- Ver 02-Projetos/sunbite-ops/plano-v2.md (Fatia 3, decisao 8) e PRD V2 6.3.
+--
+-- Ate aqui a unica saida para uma venda errada era cancelar, o que tira a
+-- venda inteira dos totais. Se o erro foi o valor digitado ou o botao de
+-- pagamento, cancelar destroi a informacao boa junto com a ruim.
+-- ============================================================================
+
+alter table public.sales add column if not exists original_total    numeric(6,2);
+alter table public.sales add column if not exists correction_reason text;
+alter table public.sales add column if not exists corrected_at      timestamptz;
+
+-- Correcao segue o mesmo caminho anonimo do cancelamento, de proposito:
+-- corrigir precisa funcionar no celular, na hora, sem internet e sem login —
+-- igual a cancelar. Levar isto pela fila autenticada faria uma correcao feita
+-- deslogada ficar presa para sempre, com o servidor guardando o valor errado.
+--
+-- A policy e estreita: UMA correcao por venda (corrected_at nulo -> nao nulo),
+-- so em venda nao cancelada, com os mesmos limites de valor do insert.
+drop policy if exists sales_correct_anon on public.sales;
+create policy sales_correct_anon
+  on public.sales for update to anon
+  using (cancelled = false and corrected_at is null)
+  with check (
+    cancelled = false
+    and corrected_at is not null
+    and original_total is not null
+    and correction_reason is not null
+    and total >= 0 and total <= 500
+    and payment in ('cash','twint')
+  );
+
+-- As policies de UPDATE se somam (OR): cancelar continua passando pela
+-- sales_cancel_anon, corrigir passa por esta. Nenhuma das duas sozinha
+-- permite o que a outra faz.
+grant update (total, payment, original_total, correction_reason, corrected_at)
+  on public.sales to anon;
+
+-- Conferencia das correcoes:
+-- select local_date, local_time, original_total, total, payment,
+--        correction_reason, corrected_at
+--   from public.sales where corrected_at is not null order by corrected_at desc;
