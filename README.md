@@ -311,6 +311,41 @@ nada e registrado.
 entrada nunca aconteceu. Nesse caso a tela diz que acabou e que falta lancar a compra, em vez
 de "da para -12 copos".
 
+## Compras e a lista do que falta
+
+Compras **nao e tela propria**: e aba dentro de Estoque, ao lado de "O que tem". A rota
+`purchases` saiu de `App.tsx`, e `PurchasesScreen` tem a prop `embedded`, que so tira o
+cabecalho e o container — fora da aba a tela continua abrindo sozinha e nao existem duas
+implementacoes da mesma coisa.
+
+> ⚠️ **Ela estava inalcancavel.** Existia no codigo desde a Etapa 7, mas a Home V2 tirou o
+> ladrilho na Fatia 2 e nada tomou o lugar — ninguem notou por quatro etapas. E a terceira
+> vez que este projeto cria uma tela sem caminho (antes: o Cardapio so no gesto, e a venda
+> sem operacao aberta). **Antes de tirar um caminho, perguntar em que estado a tela fica
+> inalcancavel.**
+
+A **lista de compras** mostra o que esta no ou abaixo do minimo, com botao de copiar. Usa o
+**calculado**, nao o total dos movimentos: o que importa e o que sobrou depois das vendas,
+nao o que um dia entrou. E vem **antes** do formulario — e o que se olha para decidir o que
+comprar, e so depois se registra a compra.
+
+## Testar venda sem sujar o banco
+
+Esta maquina tem a chave em `.env.local`, entao **venda de teste local sobe para producao**.
+
+**Desligar `fetch` e `navigator.onLine` na pagina ja aberta nao e um teste offline** — e um
+adiamento: a fila sobe no proximo carregamento, e a venda anotada como "ficou local" aparece
+em producao meia hora depois. O que funciona e apontar a configuracao para um endereco morto
+**antes** de vender:
+
+```js
+localStorage.setItem("sunbite.supabase",
+  JSON.stringify({ url: "http://127.0.0.1:1", anonKey: "teste-local-so" }));
+location.reload();
+```
+
+Apagar a chave nao serve: `loadConfig()` cai no padrao das variaveis de ambiente.
+
 ## ⚠️ View nova precisa de `revoke ... from anon`
 
 O padrao do schema `public` do Supabase e permissivo, e **RLS de tabela nao protege view**:
