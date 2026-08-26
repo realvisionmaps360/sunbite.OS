@@ -28,7 +28,6 @@ import {
   OperationScreen,
   PlacesScreen,
   PricesScreen,
-  PurchasesScreen,
   StockScreen,
   SuppliersScreen,
 } from "./components/adminScreens";
@@ -68,7 +67,6 @@ export type Screen =
   | "equipment"
   | "suppliers"
   | "stock"
-  | "purchases"
   | "finance"
   | "prices"
   | "places"
@@ -122,7 +120,6 @@ const LAZY_SCREENS: [Screen, ComponentType<{ onClose: () => void }>, string][] =
   ["equipment", EquipmentScreen, "equipment.loadError"],
   ["suppliers", SuppliersScreen, "suppliers.loadError"],
   ["stock", StockScreen, "stock.loadError"],
-  ["purchases", PurchasesScreen, "purchases.loadError"],
   ["finance", FinanceScreen, "finance.loadError"],
   ["prices", PricesScreen, "prices.loadError"],
   ["places", PlacesScreen, "places.loadError"],
@@ -232,7 +229,6 @@ export default function App() {
       case "equipment":
       case "suppliers":
       case "stock":
-      case "purchases":
       case "finance":
       case "prices":
       case "places":

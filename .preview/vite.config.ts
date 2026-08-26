@@ -48,9 +48,22 @@ const ROWS = {
     { id: "s1", name: "Morango", unit: "kg", low_stock_threshold: 2, entradas: 1234.5, consumido: 1.872, calculado: 1232.628, por_copo: 0.156, copos_restantes: 7901, ultima_contagem: "2026-08-25T18:00:00Z" },
     { id: "s2", name: "Chocolate", unit: "kg", low_stock_threshold: 2.5, entradas: 10, consumido: 0.396, calculado: 9.604, por_copo: 0.033, copos_restantes: 291, ultima_contagem: null },
     { id: "s3", name: "Copo 300ml rPET", unit: "unidade", low_stock_threshold: 100, entradas: 0, consumido: 12, calculado: -12, por_copo: 1, copos_restantes: -12, ultima_contagem: null },
-    { id: "s4", name: "Amendoa tostada", unit: "kg", low_stock_threshold: 0.5, entradas: 1, consumido: 0.165, calculado: 0.835, por_copo: null, copos_restantes: null, ultima_contagem: null },
+    { id: "s4", name: "Amendoa tostada", unit: "kg", low_stock_threshold: 0.5, entradas: 1, consumido: 0.165, calculado: 0.335, por_copo: null, copos_restantes: null, ultima_contagem: null },
   ],
-  stock_items: [],
+  stock_items: [
+    { id: "s1", name: "Morango", unit: "kg" },
+    { id: "s2", name: "Chocolate", unit: "kg" },
+    { id: "s3", name: "Copo 300ml rPET", unit: "unidade" },
+    { id: "s4", name: "Amendoa tostada", unit: "kg" },
+  ],
+  suppliers: [
+    { id: "f1", name: "A confirmar — morango" },
+    { id: "f2", name: "Denner Aarau" },
+  ],
+  purchases: [
+    { id: "p1", supplier_id: "f2", purchased_at: "2026-08-25", total: 1234.5, notes: null, created_by: null, created_at: "" },
+    { id: "p2", supplier_id: "f1", purchased_at: "2026-08-20", total: 55, notes: null, created_by: null, created_at: "" },
+  ],
 };
 
 const MOCK_SUPABASE = `
@@ -104,6 +117,12 @@ if (count >= 0) setTimeout(() => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(inp, params.get("val") ?? "0");
     inp.dispatchEvent(new Event("input", { bubbles: true }));
   }, 200);
+}, 700);
+
+// ?tap=texto clica o primeiro botao cujo rotulo casa, para fotografar uma aba.
+const tap = params.get("tap");
+if (tap) setTimeout(() => {
+  [...document.querySelectorAll("button")].find((b) => b.innerText.includes(tap))?.click();
 }, 700);
 
 createRoot(document.getElementById("root")).render(

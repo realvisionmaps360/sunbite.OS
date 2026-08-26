@@ -6,7 +6,10 @@ import { flushOutbox, queueWrite } from "../outbox";
 import { getSupabase } from "../supabase";
 import type { StockMovement, StockMovementReason, StockStatus } from "../types";
 import LoginScreen from "./LoginScreen";
+import PurchasesScreen from "./PurchasesScreen";
 import { AdminHeader, Card, EmptyState, Explain, Linha, SegmentedPicker, StatusPill, TileButton } from "./ui";
+
+type Tab = "itens" | "compras";
 
 const REASONS: { value: StockMovementReason; emoji: string }[] = [
   { value: "compra", emoji: "🛒" },
@@ -61,7 +64,9 @@ export default function StockScreen({ onClose }: { onClose: () => void }) {
 function StockBody({ onClose, identity }: { onClose: () => void; identity: Identity }) {
   const { t, lang } = useLang();
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("itens");
   const [items, setItems] = useState<StockStatus[]>([]);
+  const [copied, setCopied] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [reason, setReason] = useState<StockMovementReason>("compra");
   const [qty, setQty] = useState("");
@@ -174,9 +179,52 @@ function StockBody({ onClose, identity }: { onClose: () => void; identity: Ident
     return g(n - item.calculado);
   };
 
+  /**
+   * A lista de compras (PRD V2 8.4): o que esta no ou abaixo do minimo.
+   * Usa o **calculado**, nao o total dos movimentos — o que importa e o que
+   * sobrou depois das vendas, nao o que um dia entrou.
+   */
+  const faltando = items.filter(
+    (x) => x.low_stock_threshold != null && x.calculado <= x.low_stock_threshold,
+  );
+
+  const listaTexto = faltando
+    .map((x) => `• ${x.name} — ${t("stock.haveNeed", { have: num(x.calculado), min: num(x.low_stock_threshold ?? 0), unit: x.unit })}`)
+    .join("\n");
+
+  async function copiarLista() {
+    try {
+      await navigator.clipboard.writeText(listaTexto);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Navegador sem permissao de area de transferencia: o texto continua
+      // na tela para copiar a mao. Nao vale travar a lista por causa disso.
+    }
+  }
+
   return (
     <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("stock.title")} onClose={onClose} />
+
+      {/* Compras deixou de ser tela solta e virou aba daqui (PRD V2 8.3).
+          Ate a Fatia 5 ela existia em App.tsx mas **nenhum caminho levava a
+          ela** — a Home V2 tirou o ladrilho e nada tomou o lugar. E o mesmo
+          erro que a regra "toda tela precisa de um caminho" ja custou duas
+          vezes neste projeto. */}
+      <nav className="flex gap-1 bg-brand px-3 pb-3">
+        {(["itens", "compras"] as Tab[]).map((v) => (
+          <button
+            key={v}
+            onClick={() => setTab(v)}
+            className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${
+              tab === v ? "bg-cream text-brand-dark" : "bg-black/20 text-cream"
+            }`}
+          >
+            {t(`stock.tab.${v}`)}
+          </button>
+        ))}
+      </nav>
 
       {!online && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -186,7 +234,53 @@ function StockBody({ onClose, identity }: { onClose: () => void; identity: Ident
 
       {loading && <p className="p-6 text-center text-ink-muted">{t("operation.loading")}</p>}
 
-      {!loading && (
+      {!loading && tab === "compras" && (
+        <div className="flex flex-col">
+          {/* A lista do que falta vem ANTES do formulario: e o que se olha
+              para decidir o que comprar, e so depois se registra a compra. */}
+          <div className="space-y-3 p-4 pb-0">
+            <Card>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-display text-xl">{t("stock.shoppingList")}</h2>
+                {faltando.length > 0 && (
+                  <button
+                    onClick={() => void copiarLista()}
+                    className="shrink-0 rounded-xl border border-brand px-3 py-2 text-sm font-semibold text-brand"
+                  >
+                    {copied ? t("stock.copied") : t("stock.copy")}
+                  </button>
+                )}
+              </div>
+              {faltando.length === 0 ? (
+                <p className="text-sm text-ink-muted">{t("stock.shoppingEmpty")}</p>
+              ) : (
+                /* Nome em cima, a conta embaixo — nao e rotulo × valor.
+                   Tentei com `Linha` primeiro e "Copo 300ml rPET" quebrou em
+                   tres linhas ao lado de "tem -12, minimo 100 unidade": o
+                   texto da direita e frase, nao numero, e disputa a largura. */
+                <ul className="space-y-2">
+                  {faltando.map((x) => (
+                    <li key={x.id}>
+                      <p className="font-semibold">{x.name}</p>
+                      <p className="text-sm tabular-nums text-red-800">
+                        {t("stock.haveNeed", {
+                          have: num(x.calculado),
+                          min: num(x.low_stock_threshold ?? 0),
+                          unit: x.unit,
+                        })}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
+
+          <PurchasesScreen onClose={onClose} embedded />
+        </div>
+      )}
+
+      {!loading && tab === "itens" && (
         <div className="flex-1 space-y-3 p-4">
           {items.length === 0 && <EmptyState emoji="📦" text={t("stock.empty")} />}
 

@@ -20,7 +20,7 @@ interface DraftItem {
  * `stock_movements` com reason='compra' — mesma tabela/gatilho que o
  * Estoque usa, para o total do item subir sozinho.
  */
-export default function PurchasesScreen({ onClose }: { onClose: () => void }) {
+export default function PurchasesScreen({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const auth = useAuth();
 
   useEffect(() => {
@@ -30,10 +30,18 @@ export default function PurchasesScreen({ onClose }: { onClose: () => void }) {
   const loggedIn = auth.kind === "ativo" || auth.kind === "sessao-offline";
   if (!loggedIn) return <LoginScreen onClose={onClose} />;
 
-  return <PurchasesBody onClose={onClose} identity={auth.identity} />;
+  return <PurchasesBody onClose={onClose} identity={auth.identity} embedded={embedded} />;
 }
 
-function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: Identity }) {
+function PurchasesBody({
+  onClose,
+  identity,
+  embedded,
+}: {
+  onClose: () => void;
+  identity: Identity;
+  embedded?: boolean;
+}) {
   const { t, lang } = useLang();
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -132,8 +140,18 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
   const supplierName = (id: string | null) => suppliers.find((s) => s.id === id)?.name ?? "—";
 
   return (
-    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
-      <AdminHeader title={t("purchases.title")} onClose={onClose} />
+    /* `embedded` e a Fatia 5: Compras virou aba dentro de Estoque, e ali quem
+       ja desenhou o cabecalho e o container foi a tela de fora. Fora dessa
+       aba a tela continua abrindo sozinha, com cabecalho proprio — nao ha
+       duas implementacoes da mesma coisa. */
+    <div
+      className={
+        embedded
+          ? "flex flex-col"
+          : "tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft"
+      }
+    >
+      {!embedded && <AdminHeader title={t("purchases.title")} onClose={onClose} />}
 
       {!online && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -241,11 +259,16 @@ function PurchasesBody({ onClose, identity }: { onClose: () => void; identity: I
                     key={p.id}
                     className="flex items-center justify-between gap-2 rounded-2xl bg-cream p-4 shadow-sm"
                   >
-                    <span className="text-sm">
+                    {/* `min-w-0` no texto e `shrink-0` no valor: sem isso
+                        "CHF 55.00" quebrava em duas linhas a 360px quando o
+                        nome do fornecedor era longo. */}
+                    <span className="min-w-0 flex-1 text-sm">
                       {new Date(p.purchased_at).toLocaleDateString(lang === "de" ? "de-CH" : "pt-BR")} ·{" "}
                       {supplierName(p.supplier_id)}
                     </span>
-                    <span className="font-display text-lg text-brand">{p.total != null ? money(p.total) : "—"}</span>
+                    <span className="shrink-0 font-display text-lg tabular-nums text-brand">
+                      {p.total != null ? money(p.total) : "—"}
+                    </span>
                   </div>
                 ))}
               </div>
