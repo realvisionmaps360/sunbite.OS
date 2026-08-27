@@ -212,8 +212,24 @@ export type EstadoDisplay =
       precoCopo?: number;
       precoTopping?: number;
     }
-  /** Pagamento escolhido. `recebido` so existe em dinheiro, e pode ser nulo. */
-  | { kind: "pagamento"; payment: Payment; total: number; recebido: number | null }
+  /**
+   * Pagamento escolhido. `recebido` so existe em dinheiro, e pode ser nulo.
+   *
+   * ⚠️ `cups` e os precos viajam aqui TAMBEM, e nao so no `pedido`. Antes nao
+   * vinham, e por isso o iPad tinha de jogar a lista fora ao entrar no
+   * pagamento — a tela bonita sumia e entrava um cartaz seco no meio do nada.
+   * O cliente perdia de vista o que estava pagando bem na hora de pagar.
+   * Mandando os copos, o pedido **fica na tela** e o pagamento entra por cima.
+   */
+  | {
+      kind: "pagamento";
+      payment: Payment;
+      total: number;
+      recebido: number | null;
+      cups?: Cup[];
+      precoCopo?: number;
+      precoTopping?: number;
+    }
   /** Venda gravada: agradecimento, e o iPad volta ao repouso sozinho. */
   | { kind: "obrigado"; total: number };
 

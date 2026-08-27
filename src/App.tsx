@@ -246,7 +246,17 @@ export default function App() {
     if (confirmation) {
       estado = { kind: "obrigado", total: confirmation.total };
     } else if (screen === "review" && payment) {
-      estado = { kind: "pagamento", payment, total: order.total, recebido };
+      estado = {
+        kind: "pagamento",
+        payment,
+        total: order.total,
+        recebido,
+        // Os copos vao junto para o iPad NAO precisar apagar o pedido ao
+        // entrar no pagamento — ver o comentario em `EstadoDisplay`.
+        cups: order.cups,
+        precoCopo: getCupPrice(),
+        precoTopping: getToppingPrice(),
+      };
     } else if (
       (screen === "sale" || screen === "payment") &&
       order.cups.length > 0

@@ -16,6 +16,7 @@ import {
   type Vitrine,
 } from "./protocol";
 import { ouvir, type Conexao } from "./link";
+import type { Cup } from "../types";
 
 /**
  * Customer Display — a tela do iPad, virada para o cliente.
@@ -70,6 +71,16 @@ export function Display() {
   }, [estado]);
 
   const repouso = estado.kind === "repouso";
+  const twint = estado.kind === "pagamento" && estado.payment === "twint";
+
+  /**
+   * A largura da metade esquerda, e e ela que conta a historia.
+   *
+   * Repouso: a vitrine ocupa tudo. Pedido: encolhe para o pedido caber. TWINT:
+   * cresce um pouco — o pedido **encolhe para dar destaque** e o QR entra no
+   * lugar do video, que foi exatamente o que o Felipe pediu em 27/08.
+   */
+  const largura = repouso ? "100%" : twint ? "46%" : "34%";
 
   /**
    * A vitrine que o celular mandou, guardada no proprio iPad.
@@ -104,16 +115,16 @@ export function Display() {
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-brand-dark text-cream">
-      {/* O video NUNCA desmonta — so muda de largura. Remontar reiniciaria o
-          arquivo do zero a cada pedido, e um video que pisca a cada cliente e
-          pior que nenhum video. E a diferenca entre uma barraca viva e um
-          caixa de supermercado. */}
+      {/* O video NUNCA desmonta — so muda de largura, e o que entra por cima
+          dele e sempre uma camada. Remontar reiniciaria o arquivo do zero a
+          cada cliente, e um video que pisca e pior que nenhum video. */}
       <motion.div
         className="relative shrink-0 overflow-hidden"
-        animate={{ width: repouso ? "100%" : "34%" }}
+        animate={{ width: largura }}
         transition={{ type: "spring", stiffness: 120, damping: 22 }}
       >
         <Video />
+
         {/* O rodizio da vitrine so existe no repouso. Durante a venda o video
             volta sozinho: um QR do Instagram por cima do pedido seria roubar a
             atencao de quem esta pagando. */}
@@ -125,12 +136,33 @@ export function Display() {
             onTrocar={() => setCodigo(trocarCodigo())}
           />
         )}
+
+        {/* O QR do TWINT entra AQUI, no lugar do video, sem tirar o pedido da
+            tela. E a camada que o Felipe pediu. */}
+        <AnimatePresence>
+          {estado.kind === "pagamento" && estado.payment === "twint" && (
+            <PainelTwint key="twint" total={estado.total} />
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {!repouso && (
         <div className="flex min-w-0 flex-1 flex-col">
-          {estado.kind === "pedido" && <Pedido estado={estado} />}
-          {estado.kind === "pagamento" && <Pagamento estado={estado} />}
+          {(estado.kind === "pedido" || estado.kind === "pagamento") && (
+            <ListaPedido
+              cups={estado.cups ?? []}
+              total={estado.total}
+              precoCopo={estado.precoCopo}
+              precoTopping={estado.precoTopping}
+              /* No pagamento a lista cede espaco para o bloco de baixo — e a
+                 base do "modo 3" que o Felipe escolheu. */
+              rodape={
+                estado.kind === "pagamento" ? (
+                  <BlocoPagamento estado={estado} />
+                ) : null
+              }
+            />
+          )}
           {estado.kind === "obrigado" && <Obrigado estado={estado} />}
         </div>
       )}
@@ -221,16 +253,80 @@ function CenaPlaceholder() {
   );
 }
 
+/* ===========================================================================
+   OS TOQUES DE MORANGO E CHOCOLATE
+   ===========================================================================
+   Pedido do Felipe: "elementos bem sutis". Sutis mesmo — se der para
+   apontar e dizer "olha o desenho", passou do ponto. Eles existem para a
+   tela parecer da Sunbite mesmo quando so tem um numero nela.
+   =========================================================================== */
+
 /**
- * O rodizio da vitrine: video → Instagram → Google → video…
+ * Um fio de chocolate escorrendo, com tres gotas.
  *
- * Fica POR CIMA do video, e o video nunca desmonta por baixo. Trocar de
- * painel remontando o `<video>` reiniciaria o arquivo a cada volta, e um
- * video que recomeca do zero a cada 40 segundos e pior que nenhum.
+ * Serve de divisor: separa o pedido do bloco de pagamento sem uma linha reta,
+ * que numa tela de doce le como formulario.
+ */
+function FioDeChocolate({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 400 20"
+      preserveAspectRatio="none"
+      className={`h-[clamp(.7rem,1.8vh,1.1rem)] w-full ${className}`}
+      aria-hidden="true"
+    >
+      <path
+        d="M0 0 L400 0 L400 7 C 370 7, 360 13, 330 13 S 285 5, 255 6 S 205 14, 175 12 S 120 4, 90 7 S 35 14, 0 9 Z"
+        fill="#5A2E1B"
+        opacity="0.55"
+      />
+      <circle cx="318" cy="16" r="2.6" fill="#5A2E1B" opacity="0.5" />
+      <circle cx="168" cy="16" r="2" fill="#5A2E1B" opacity="0.42" />
+      <circle cx="76" cy="15" r="2.3" fill="#5A2E1B" opacity="0.46" />
+    </svg>
+  );
+}
+
+/** Morangos e chocolates boiando bem apagados no fundo de um painel. */
+const BOIANDO = [
+  { e: "🍓", top: "12%", left: "12%", tam: "5.5rem", dur: 13, atraso: 0 },
+  { e: "🍫", top: "72%", left: "16%", tam: "4rem", dur: 17, atraso: 2.5 },
+  { e: "🍓", top: "78%", left: "78%", tam: "6rem", dur: 15, atraso: 1.2 },
+  { e: "🍫", top: "16%", left: "80%", tam: "3.4rem", dur: 19, atraso: 4 },
+];
+
+function Boiando() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {BOIANDO.map((b, i) => (
+        <span
+          key={i}
+          className="absolute select-none opacity-[0.09]"
+          style={{
+            top: b.top,
+            left: b.left,
+            fontSize: b.tam,
+            animation: `boiar ${b.dur}s ease-in-out ${b.atraso}s infinite`,
+          }}
+        >
+          {b.e}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ===========================================================================
+   O RODIZIO DA VITRINE
+   =========================================================================== */
+
+/**
+ * O rodizio: video → Instagram → Google → video…
  *
- * O painel de video e simplesmente "nao mostrar nada aqui" — o que aparece e
- * o video que ja estava rodando. Por isso o `AnimatePresence` fica aqui e nao
- * dentro do painel: e ele que faz o QR entrar e sair por cima do video.
+ * Fica POR CIMA do video, e o video nunca desmonta por baixo. O painel de
+ * video e simplesmente "nao mostrar nada aqui" — o que aparece e o video que
+ * ja estava rodando. Por isso o `AnimatePresence` fica aqui e nao dentro do
+ * painel: e ele que faz o QR entrar e sair por cima.
  */
 function Rodizio({ vitrine }: { vitrine: Vitrine }) {
   // A chave e o conteudo, nao o objeto: e o que garante que o rodizio so
@@ -265,11 +361,10 @@ function Rodizio({ vitrine }: { vitrine: Vitrine }) {
 }
 
 /* ===========================================================================
-   OS PAINEIS DE QR
+   OS PAINEIS DE QR DA VITRINE
    ===========================================================================
    Cada rede com a propria cara, e nao um molde generico com o texto trocado:
-   o cliente reconhece o Instagram pelo degrade antes de ler qualquer palavra,
-   e isso e metade do trabalho de um cartaz. Pedido do Felipe em 27/08.
+   o cliente reconhece o Instagram pelo degrade antes de ler qualquer palavra.
 
    Os simbolos sao DESENHADOS aqui em SVG, nao baixados: o iPad tem que abrir
    sem rede, e um logo que nao carrega e um buraco branco no meio do balcao.
@@ -297,14 +392,14 @@ function MarcaInstagram() {
  * nas quatro cores e reconhecido na hora e nao finge ser o que nao e.
  */
 function MarcaGoogle() {
-  const arco = (cor: string, de: number, ate: number) => {
+  const arco = (cor: string, deGrau: number, ateGrau: number) => {
     const r = 20, cx = 24, cy = 24;
     const p = (g: number) => [
       cx + r * Math.cos((g * Math.PI) / 180),
       cy + r * Math.sin((g * Math.PI) / 180),
     ];
-    const [x1, y1] = p(de);
-    const [x2, y2] = p(ate);
+    const [x1, y1] = p(deGrau);
+    const [x2, y2] = p(ateGrau);
     return (
       <path
         key={cor}
@@ -405,10 +500,7 @@ function PainelQR({ painel }: { painel: Extract<PainelVitrine, { url: string }> 
 
       {/* ── O conteudo, dentro de um cartao ──────────────────────────────────
           O cartao nao e enfeite: sem ele o texto flutua solto sobre a cor e a
-          tela le como um fundo de tela, nao como um convite. Com moldura, le
-          como cartaz — que e o que ele e. No Instagram o cartao e de vidro
-          (deixa o degrade passar); no Google e branco solido, que e a
-          linguagem deles. */}
+          tela le como um fundo de tela, nao como um convite. */}
       <div className="relative flex h-full items-center justify-center p-[clamp(1rem,3vh,2.5rem)]">
         <motion.div
           variants={item}
@@ -418,63 +510,63 @@ function PainelQR({ painel }: { painel: Extract<PainelVitrine, { url: string }> 
               : "bg-white text-ink shadow-[0_28px_70px_rgba(60,64,67,.20)] ring-1 ring-black/[0.06]"
           }`}
         >
-        <motion.div
-          variants={item}
-          className={`h-[clamp(3rem,8vh,5rem)] w-[clamp(3rem,8vh,5rem)] ${
-            insta ? "text-white" : ""
-          }`}
-        >
-          {insta ? <MarcaInstagram /> : <MarcaGoogle />}
-        </motion.div>
-
-        <motion.p
-          variants={item}
-          className="font-display text-[clamp(2.2rem,6.6vh,4.2rem)] leading-none"
-        >
-          {insta ? "Follow us" : "Hat's geschmeckt?"}
-        </motion.p>
-
-        <motion.p
-          variants={item}
-          className={`text-[clamp(1rem,2.6vh,1.6rem)] ${
-            insta ? "text-white/85" : "text-ink-muted"
-          }`}
-        >
-          {insta
-            ? "Neue Sorten, Fotos und wo wir als Nächstes stehen"
-            : "Deine Bewertung hilft uns weiter"}
-        </motion.p>
-
-        {!insta && (
-          <motion.div variants={item}>
-            <Estrelas atraso={0.5} />
+          <motion.div
+            variants={item}
+            className={`h-[clamp(3rem,8vh,5rem)] w-[clamp(3rem,8vh,5rem)] ${
+              insta ? "text-white" : ""
+            }`}
+          >
+            {insta ? <MarcaInstagram /> : <MarcaGoogle />}
           </motion.div>
-        )}
 
-        {/* O QR. Branco sempre e com margem propria: QR sobre cor nao le em
-            camera de celular a meio metro, e este e o unico elemento da tela
-            que precisa FUNCIONAR, nao so ser bonito. */}
-        <motion.div
-          variants={item}
-          className="rounded-[1.6rem] bg-white p-[clamp(.55rem,1.4vh,1rem)] shadow-[0_10px_30px_rgba(0,0,0,.18)]"
-        >
-          <div
-            className="h-[clamp(8rem,26vh,14rem)] w-[clamp(8rem,26vh,14rem)] [&>svg]:h-full [&>svg]:w-full"
-            // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        </motion.div>
+          <motion.p
+            variants={item}
+            className="font-display text-[clamp(2.2rem,6.6vh,4.2rem)] leading-none"
+          >
+            {insta ? "Follow us" : "Hat's geschmeckt?"}
+          </motion.p>
 
-        <motion.p
-          variants={item}
-          className={
-            insta
-              ? "rounded-full bg-white/20 px-6 py-2 text-[clamp(1rem,2.7vh,1.7rem)] font-semibold tracking-wide"
-              : "text-[clamp(1rem,2.7vh,1.6rem)] font-semibold text-ink"
-          }
-        >
-          {insta ? "@sunbite.ch" : "Bewertet uns auf Google"}
-        </motion.p>
+          <motion.p
+            variants={item}
+            className={`text-[clamp(1rem,2.6vh,1.6rem)] ${
+              insta ? "text-white/85" : "text-ink-muted"
+            }`}
+          >
+            {insta
+              ? "Neue Sorten, Fotos und wo wir als Nächstes stehen"
+              : "Deine Bewertung hilft uns weiter"}
+          </motion.p>
+
+          {!insta && (
+            <motion.div variants={item}>
+              <Estrelas atraso={0.5} />
+            </motion.div>
+          )}
+
+          {/* O QR. Branco sempre e com margem propria: QR sobre cor nao le em
+              camera de celular a meio metro, e este e o unico elemento da tela
+              que precisa FUNCIONAR, nao so ser bonito. */}
+          <motion.div
+            variants={item}
+            className="rounded-[1.6rem] bg-white p-[clamp(.55rem,1.4vh,1rem)] shadow-[0_10px_30px_rgba(0,0,0,.18)]"
+          >
+            <div
+              className="h-[clamp(8rem,26vh,14rem)] w-[clamp(8rem,26vh,14rem)] [&>svg]:h-full [&>svg]:w-full"
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          </motion.div>
+
+          <motion.p
+            variants={item}
+            className={
+              insta
+                ? "rounded-full bg-white/20 px-6 py-2 text-[clamp(1rem,2.7vh,1.7rem)] font-semibold tracking-wide"
+                : "text-[clamp(1rem,2.7vh,1.6rem)] font-semibold text-ink"
+            }
+          >
+            {insta ? "@sunbite.ch" : "Bewertet uns auf Google"}
+          </motion.p>
         </motion.div>
       </div>
     </motion.div>
@@ -528,6 +620,201 @@ function Pareamento({
 }
 
 /* ===========================================================================
+   O PAINEL DO TWINT — entra no lugar do video
+   ===========================================================================
+   Decisao do Felipe, 27/08: na hora do QR o pedido **fica na tela** e apenas
+   encolhe um pouco; o QR aparece suavemente onde estava o video. Antes disso
+   o iPad trocava de tela inteira e o cliente perdia de vista o que estava
+   pagando bem na hora de pagar.
+   =========================================================================== */
+
+function PainelTwint({ total }: { total: number }) {
+  // O SVG e montado dentro do iPad, sem rede: o payload do QR suico e texto
+  // puro. `useMemo` porque so muda quando o valor muda.
+  const svg = useMemo(() => qrDoValor(total), [total]);
+  const reduzir = useReducedMotion();
+
+  const item = {
+    fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 24 },
+    dentro: {
+      opacity: 1,
+      y: 0,
+      transition: { type: "spring" as const, stiffness: 250, damping: 24 },
+    },
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{
+        opacity: 1,
+        transition: { staggerChildren: reduzir ? 0 : 0.1, delayChildren: 0.1 },
+      }}
+      exit={{ opacity: 0, transition: { duration: 0.3 } }}
+      className="absolute inset-0 overflow-hidden bg-brand-dark"
+    >
+      {/* Um brilho quente atras, para o painel nao ser um retangulo escuro. */}
+      <div className="absolute inset-0 bg-[radial-gradient(70%_55%_at_50%_18%,rgba(201,138,46,.28),transparent_72%),radial-gradient(60%_50%_at_50%_100%,rgba(132,20,18,.55),transparent_70%)]" />
+      <Boiando />
+
+      <div className="relative flex h-full flex-col items-center justify-center gap-[clamp(.5rem,1.8vh,1.2rem)] px-[clamp(1rem,3vw,2.5rem)] text-center">
+        <motion.p
+          variants={item}
+          className="text-[clamp(.8rem,2.2vh,1.3rem)] uppercase tracking-[0.34em] text-cream/60"
+        >
+          TWINT
+        </motion.p>
+
+        <motion.p
+          variants={item}
+          className="font-display text-[clamp(2.2rem,7.5vh,4.4rem)] leading-none tabular-nums text-cream"
+        >
+          {money(total)}
+        </motion.p>
+
+        {svg ? (
+          <>
+            {/* O QR entra com uma virada curta: e o gesto de "aqui esta".
+                Branco sempre — QR sobre cor nao le em camera a meio metro. */}
+            <motion.div
+              initial={
+                reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.82, rotate: -6 }
+              }
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 220, damping: 18, delay: 0.24 }}
+              className="relative rounded-[1.8rem] bg-white p-[clamp(.6rem,1.6vh,1.1rem)] shadow-[0_26px_64px_rgba(0,0,0,.42)]"
+            >
+              <div
+                className="h-[clamp(8rem,32vh,17rem)] w-[clamp(8rem,32vh,17rem)] [&>svg]:h-full [&>svg]:w-full"
+                // eslint-disable-next-line react/no-danger
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+              {/* Um morango pendurado no canto do cartao. Sutil, mas e o que
+                  faz o QR ser da Sunbite e nao de um caixa qualquer. */}
+              <span className="absolute -right-3 -top-4 rotate-12 text-[clamp(1.4rem,3.4vh,2.2rem)] drop-shadow">
+                🍓
+              </span>
+            </motion.div>
+
+            <motion.p
+              variants={item}
+              className="text-[clamp(.85rem,2.4vh,1.4rem)] text-cream/75"
+            >
+              Scannen und bezahlen
+            </motion.p>
+          </>
+        ) : (
+          // Sem IBAN configurado nao ha QR — e o display DIZ isso, em vez de
+          // desenhar um codigo que nao leva a lugar nenhum. Ver `config.ts`.
+          <motion.div
+            variants={item}
+            className="mt-2 max-w-[22rem] rounded-[1.6rem] border border-cream/20 bg-cream/10 px-6 py-5"
+          >
+            <p className="text-[clamp(1rem,2.8vh,1.6rem)] leading-snug text-cream/85">
+              Bitte den QR-Code am Stand scannen.
+            </p>
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ===========================================================================
+   O BLOCO DE PAGAMENTO — entra por baixo do pedido
+   ===========================================================================
+   No dinheiro e onde o troco aparece, e ele e o maior numero da tela: e o
+   ponto que mais gera discussao num balcao. No TWINT e so uma linha curta
+   apontando para o QR, porque o QR ja esta do lado.
+   =========================================================================== */
+
+function BlocoPagamento({
+  estado,
+}: {
+  estado: Extract<EstadoDisplay, { kind: "pagamento" }>;
+}) {
+  const reduzir = useReducedMotion();
+  const dinheiro = estado.payment === "cash";
+  const troco =
+    estado.recebido !== null ? Math.max(0, estado.recebido - estado.total) : null;
+
+  return (
+    <motion.div
+      initial={reduzir ? { opacity: 0 } : { opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 200, damping: 24 }}
+      className="mt-[clamp(.4rem,1.2vh,.9rem)]"
+    >
+      <FioDeChocolate />
+
+      {dinheiro ? (
+        <div className="pt-[clamp(.4rem,1.2vh,.9rem)]">
+          <div className="flex items-baseline justify-between gap-3 text-[clamp(.85rem,2.2vh,1.25rem)] text-cream/70">
+            <span>Bar bezahlen</span>
+            {estado.recebido !== null && (
+              <span className="tabular-nums">
+                Erhalten {money(estado.recebido)}
+              </span>
+            )}
+          </div>
+
+          <AnimatePresence mode="popLayout">
+            {troco !== null ? (
+              <motion.div
+                key={troco}
+                initial={reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+                transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                className="mt-[clamp(.3rem,1vh,.6rem)] flex items-center justify-between gap-4 rounded-[1.4rem] bg-cream px-[clamp(.9rem,2.5vw,1.8rem)] py-[clamp(.5rem,1.6vh,1rem)] text-brand-dark"
+              >
+                <span className="text-[clamp(.75rem,2vh,1.15rem)] uppercase tracking-[0.2em] opacity-60">
+                  Rückgeld
+                </span>
+                <span className="font-display text-[clamp(2rem,8vh,4.5rem)] leading-none tabular-nums">
+                  {money(troco)}
+                </span>
+              </motion.div>
+            ) : (
+              <motion.p
+                key="esperando"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="mt-[clamp(.3rem,1vh,.6rem)] text-[clamp(.85rem,2.3vh,1.3rem)] text-cream/45"
+              >
+                Bitte den Betrag geben — das Rückgeld erscheint hier.
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+      ) : (
+        // TWINT: o QR ja esta a esquerda, entao aqui so a seta que leva o olho
+        // ate ele. Repetir o valor seria dizer o mesmo numero duas vezes.
+        <motion.div
+          initial={reduzir ? { opacity: 0 } : { opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.18, type: "spring", stiffness: 240, damping: 22 }}
+          className="mt-[clamp(.4rem,1.2vh,.9rem)] flex items-center gap-3 rounded-[1.4rem] bg-cream/10 px-[clamp(.9rem,2.5vw,1.6rem)] py-[clamp(.5rem,1.5vh,.9rem)]"
+        >
+          <motion.span
+            aria-hidden="true"
+            animate={reduzir ? {} : { x: [0, -7, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            className="text-[clamp(1.1rem,3vh,1.8rem)] text-cream/70"
+          >
+            ←
+          </motion.span>
+          <span className="text-[clamp(.9rem,2.4vh,1.35rem)] text-cream/80">
+            Mit TWINT bezahlen
+          </span>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+/* ===========================================================================
    O PEDIDO MONTANDO
    ===========================================================================
    Decisao do Felipe em 27/08: **conta aberta**. Cada copo numa linha, os
@@ -537,12 +824,25 @@ function Pareamento({
    As animacoes nao sao enfeite: um copo que ENTRA na lista confirma para o
    cliente que o toque da Romana virou alguma coisa. Lista que so aparece
    maior nao comunica nada.
+
+   O mesmo componente serve o pedido E o pagamento — e essa reutilizacao que
+   faz a lista NAO piscar quando a Romana escolhe a forma de pagamento: e o
+   mesmo elemento, so com um bloco novo embaixo.
    =========================================================================== */
 
-function Pedido({
-  estado,
+function ListaPedido({
+  cups,
+  total,
+  precoCopo,
+  precoTopping,
+  rodape,
 }: {
-  estado: Extract<EstadoDisplay, { kind: "pedido" }>;
+  cups: Cup[];
+  total: number;
+  precoCopo?: number;
+  precoTopping?: number;
+  /** O que entra por baixo da lista. No pagamento, o troco ou o aviso do QR. */
+  rodape: React.ReactNode;
 }) {
   const lista = useRef<HTMLUListElement>(null);
   const reduzir = useReducedMotion();
@@ -553,33 +853,30 @@ function Pedido({
   useEffect(() => {
     const el = lista.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [estado.cups.length]);
+  }, [cups.length]);
 
-  const precoCopo = estado.precoCopo;
-  const precoTopping = estado.precoTopping;
   /** Sem preco no payload (celular desatualizado), a linha mostra so o nome. */
   const temPreco = typeof precoCopo === "number" && typeof precoTopping === "number";
   const precoDo = (n: number) => (precoCopo ?? 0) + n * (precoTopping ?? 0);
-
-  const toppings = estado.cups.reduce((n, c) => n + c.toppings.length, 0);
+  const toppings = cups.reduce((n, c) => n + c.toppings.length, 0);
 
   return (
-    <div className="flex h-full flex-col px-[clamp(1.5rem,3.5vw,3rem)] py-[clamp(1.2rem,3vh,2.2rem)]">
+    <div className="flex h-full flex-col px-[clamp(1.2rem,3vw,2.6rem)] py-[clamp(1rem,2.6vh,2rem)]">
       {/* ── Cabecalho ─────────────────────────────────────────────────────── */}
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="font-display text-[clamp(1.8rem,5vh,3rem)] leading-none text-cream">
+      <div className="flex shrink-0 items-baseline justify-between gap-4">
+        <h1 className="font-display text-[clamp(1.6rem,4.6vh,2.8rem)] leading-none text-cream">
           Ihre Bestellung
         </h1>
         <AnimatePresence mode="popLayout">
           <motion.span
-            key={estado.cups.length}
+            key={cups.length}
             initial={reduzir ? { opacity: 0 } : { opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduzir ? { opacity: 0 } : { opacity: 0, y: 12 }}
             transition={{ duration: 0.22 }}
-            className="rounded-full bg-cream/15 px-4 py-1 text-[clamp(.8rem,2.2vh,1.15rem)] tabular-nums text-cream/80"
+            className="rounded-full bg-cream/15 px-4 py-1 text-[clamp(.75rem,2vh,1.1rem)] tabular-nums text-cream/80"
           >
-            {estado.cups.length} {estado.cups.length === 1 ? "Becher" : "Becher"}
+            {cups.length} Becher
           </motion.span>
         </AnimatePresence>
       </div>
@@ -587,10 +884,10 @@ function Pedido({
       {/* ── As linhas do pedido ───────────────────────────────────────────── */}
       <ul
         ref={lista}
-        className="mt-[clamp(.8rem,2.5vh,1.6rem)] min-h-0 flex-1 space-y-[clamp(.5rem,1.4vh,.9rem)] overflow-y-auto pr-1"
+        className="mt-[clamp(.7rem,2vh,1.4rem)] min-h-0 flex-1 space-y-[clamp(.45rem,1.2vh,.8rem)] overflow-y-auto pr-1"
       >
         <AnimatePresence initial={false}>
-          {estado.cups.map((c, i) => (
+          {cups.map((c, i) => (
             <motion.li
               key={c.id}
               layout
@@ -598,23 +895,23 @@ function Pedido({
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={reduzir ? { opacity: 0 } : { opacity: 0, x: -40, scale: 0.94 }}
               transition={{ type: "spring", stiffness: 320, damping: 26 }}
-              className="flex items-start gap-[clamp(.6rem,1.6vw,1.1rem)] rounded-[1.4rem] bg-cream/[0.09] px-[clamp(.8rem,1.8vw,1.4rem)] py-[clamp(.6rem,1.6vh,1rem)]"
+              className="flex items-start gap-[clamp(.5rem,1.4vw,1rem)] rounded-[1.3rem] bg-cream/[0.09] px-[clamp(.7rem,1.6vw,1.3rem)] py-[clamp(.5rem,1.4vh,.9rem)]"
             >
               {/* O numero do copo num circulo: da a linha um ponto de ancora
                   e deixa claro que sao copos separados, nao uma lista solta. */}
-              <span className="mt-[2px] grid h-[clamp(1.9rem,4.4vh,2.9rem)] w-[clamp(1.9rem,4.4vh,2.9rem)] shrink-0 place-items-center rounded-full bg-cream text-brand-dark">
-                <span className="font-display text-[clamp(.95rem,2.4vh,1.5rem)] leading-none">
+              <span className="mt-[2px] grid h-[clamp(1.7rem,4vh,2.7rem)] w-[clamp(1.7rem,4vh,2.7rem)] shrink-0 place-items-center rounded-full bg-cream text-brand-dark">
+                <span className="font-display text-[clamp(.85rem,2.2vh,1.4rem)] leading-none">
                   {i + 1}
                 </span>
               </span>
 
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline justify-between gap-3">
-                  <span className="font-display text-[clamp(1.15rem,3.2vh,2rem)] leading-tight text-cream">
+                  <span className="font-display text-[clamp(1.05rem,3vh,1.9rem)] leading-tight text-cream">
                     🍓 Becher
                   </span>
                   {temPreco && (
-                    <span className="shrink-0 font-display text-[clamp(1.05rem,2.9vh,1.75rem)] tabular-nums text-cream/85">
+                    <span className="shrink-0 font-display text-[clamp(.95rem,2.7vh,1.65rem)] tabular-nums text-cream/85">
                       {money(precoDo(c.toppings.length))}
                     </span>
                   )}
@@ -622,7 +919,7 @@ function Pedido({
 
                 {/* Os toppings como fichas. Cada uma entra com um estalo: e o
                     retorno visual do toque que a Romana acabou de dar. */}
-                <span className="mt-[clamp(.25rem,.8vh,.5rem)] flex flex-wrap gap-[clamp(.25rem,.7vh,.45rem)]">
+                <span className="mt-[clamp(.2rem,.7vh,.45rem)] flex flex-wrap gap-[clamp(.2rem,.6vh,.4rem)]">
                   <AnimatePresence initial={false}>
                     {c.toppings.length === 0 ? (
                       <motion.span
@@ -630,7 +927,7 @@ function Pedido({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="text-[clamp(.75rem,2vh,1.1rem)] text-cream/45"
+                        className="text-[clamp(.7rem,1.9vh,1.05rem)] text-cream/45"
                       >
                         ohne Topping
                       </motion.span>
@@ -645,7 +942,7 @@ function Pedido({
                           animate={{ opacity: 1, scale: 1 }}
                           exit={reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.4 }}
                           transition={{ type: "spring", stiffness: 500, damping: 22 }}
-                          className="inline-flex items-center gap-1 rounded-full bg-cream/15 px-[clamp(.45rem,1.1vw,.8rem)] py-[clamp(.1rem,.5vh,.3rem)] text-[clamp(.75rem,2vh,1.15rem)] text-cream/90"
+                          className="inline-flex items-center gap-1 rounded-full bg-cream/15 px-[clamp(.4rem,1vw,.75rem)] py-[clamp(.08rem,.4vh,.28rem)] text-[clamp(.7rem,1.9vh,1.1rem)] text-cream/90"
                         >
                           <span aria-hidden="true">{toppingEmoji(x)}</span>
                           {de(`topping.${x}`)}
@@ -661,11 +958,14 @@ function Pedido({
       </ul>
 
       {/* ── O rodape com a conta ──────────────────────────────────────────── */}
-      <div className="mt-[clamp(.7rem,2vh,1.4rem)] border-t border-cream/20 pt-[clamp(.7rem,2vh,1.4rem)]">
+      <motion.div
+        layout
+        className="mt-[clamp(.6rem,1.8vh,1.2rem)] shrink-0 border-t border-cream/20 pt-[clamp(.6rem,1.8vh,1.2rem)]"
+      >
         {temPreco && (
-          <div className="flex justify-between gap-4 text-[clamp(.8rem,2.1vh,1.15rem)] text-cream/55">
+          <div className="flex justify-between gap-4 text-[clamp(.75rem,1.9vh,1.05rem)] text-cream/55">
             <span>
-              {estado.cups.length} × Becher {money(precoCopo!)}
+              {cups.length} × Becher {money(precoCopo!)}
             </span>
             {toppings > 0 && (
               <span className="tabular-nums">
@@ -674,90 +974,29 @@ function Pedido({
             )}
           </div>
         )}
-        <div className="mt-[clamp(.3rem,1vh,.7rem)] flex items-baseline justify-between gap-4">
-          <span className="text-[clamp(.9rem,2.4vh,1.5rem)] uppercase tracking-[0.2em] text-cream/60">
+        <div className="mt-[clamp(.2rem,.8vh,.6rem)] flex items-baseline justify-between gap-4">
+          <span className="text-[clamp(.8rem,2.2vh,1.4rem)] uppercase tracking-[0.2em] text-cream/60">
             Total
           </span>
           {/* O total troca com uma virada curta: o numero MUDOU, e o cliente
               tem que perceber que mudou. */}
           <AnimatePresence mode="popLayout">
             <motion.span
-              key={estado.total}
+              key={total}
               initial={reduzir ? { opacity: 0 } : { opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
               exit={reduzir ? { opacity: 0 } : { opacity: 0, y: -22 }}
               transition={{ type: "spring", stiffness: 380, damping: 28 }}
-              className="font-display text-[clamp(2rem,7.5vh,4.5rem)] leading-none tabular-nums text-cream"
+              className="font-display text-[clamp(1.8rem,6.8vh,4rem)] leading-none tabular-nums text-cream"
             >
-              {money(estado.total)}
+              {money(total)}
             </motion.span>
           </AnimatePresence>
         </div>
-      </div>
-    </div>
-  );
-}
+      </motion.div>
 
-function Pagamento({
-  estado,
-}: {
-  estado: Extract<EstadoDisplay, { kind: "pagamento" }>;
-}) {
-  if (estado.payment === "twint") return <Twint total={estado.total} />;
-
-  const troco =
-    estado.recebido !== null ? estado.recebido - estado.total : null;
-
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8 text-center">
-      <p className="font-display text-4xl text-cream/80">Bar bezahlen</p>
-      <Linha rotulo="Zu bezahlen" valor={estado.total} />
-      {estado.recebido !== null && (
-        <>
-          <Linha rotulo="Erhalten" valor={estado.recebido} />
-          {/* O troco e o numero maior da tela: e onde mais da discussao no
-              balcao, e a razao pela qual o Felipe pediu esta tela. */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: "spring", stiffness: 300, damping: 22 }}
-            className="mt-2 w-full rounded-3xl bg-cream px-8 py-6 text-brand-dark"
-          >
-            <p className="text-lg uppercase tracking-[0.2em] opacity-60">
-              Rückgeld
-            </p>
-            <p className="font-display text-[clamp(3rem,12vw,7rem)] leading-none tabular-nums">
-              {money(Math.max(0, troco ?? 0))}
-            </p>
-          </motion.div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function Twint({ total }: { total: number }) {
-  // O SVG e montado dentro do iPad, sem rede: o payload do QR suico e texto
-  // puro. `useMemo` porque so muda quando o valor muda.
-  const svg = useMemo(() => qrDoValor(total), [total]);
-
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8 text-center">
-      <p className="font-display text-4xl text-cream/80">TWINT</p>
-      <Linha rotulo="Zu bezahlen" valor={total} />
-      {svg ? (
-        <div
-          className="mt-2 w-[min(52vh,26rem)] rounded-3xl bg-white p-5"
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ) : (
-        // Sem IBAN configurado nao ha QR — e o display DIZ isso, em vez de
-        // desenhar um codigo que nao leva a lugar nenhum. Ver `config.ts`.
-        <p className="mt-2 max-w-md text-2xl text-cream/70">
-          Bitte den QR-Code am Stand scannen.
-        </p>
-      )}
+      {/* O bloco de pagamento entra AQUI, embaixo, sem tirar nada da tela. */}
+      <div className="shrink-0">{rodape}</div>
     </div>
   );
 }
@@ -776,8 +1015,9 @@ function Obrigado({
         fora: { opacity: 0 },
         dentro: { opacity: 1, transition: { staggerChildren: reduzir ? 0 : 0.1 } },
       }}
-      className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center"
+      className="relative flex h-full flex-col items-center justify-center gap-4 p-8 text-center"
     >
+      <Boiando />
       <motion.p
         variants={{
           fora: reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.4 },
@@ -787,7 +1027,7 @@ function Obrigado({
             transition: { type: "spring", stiffness: 260, damping: 12 },
           },
         }}
-        className="text-[6rem] leading-none"
+        className="relative text-[6rem] leading-none"
       >
         🍓
       </motion.p>
@@ -796,7 +1036,7 @@ function Obrigado({
           fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 20 },
           dentro: { opacity: 1, y: 0 },
         }}
-        className="font-display text-[clamp(3rem,9vw,6rem)] leading-none"
+        className="relative font-display text-[clamp(3rem,9vw,6rem)] leading-none"
       >
         Danke!
       </motion.p>
@@ -805,7 +1045,7 @@ function Obrigado({
           fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 20 },
           dentro: { opacity: 1, y: 0 },
         }}
-        className="text-2xl text-cream/70"
+        className="relative text-2xl text-cream/70"
       >
         {money(estado.total)}
       </motion.p>
@@ -814,19 +1054,10 @@ function Obrigado({
           fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 20 },
           dentro: { opacity: 1, y: 0 },
         }}
-        className="text-xl text-cream/50"
+        className="relative text-xl text-cream/50"
       >
         Bis zum nächsten Mal.
       </motion.p>
     </motion.div>
-  );
-}
-
-function Linha({ rotulo, valor }: { rotulo: string; valor: number }) {
-  return (
-    <p className="text-3xl">
-      <span className="text-cream/60">{rotulo}: </span>
-      <span className="font-display tabular-nums">{money(valor)}</span>
-    </p>
   );
 }

@@ -100,3 +100,13 @@ button {
   0%, 100% { transform: scale(1) translate(0, 0); opacity: .95; }
   50%      { transform: scale(1.18) translate(4%, -5%); opacity: 1; }
 }
+
+/*
+ * Customer Display: morangos e chocolates boiando bem apagados no fundo dos
+ * paineis de pagamento e do agradecimento. Deriva minima, so para o fundo nao
+ * ser um retangulo morto atras do numero.
+ */
+@keyframes boiar {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50%      { transform: translate(6px, -14px) rotate(7deg); }
+}
