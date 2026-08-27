@@ -109,14 +109,88 @@ export const canal = (codigo: string) => `display:${codigo}`;
 export const EVENTO = "estado";
 
 /**
+ * A VITRINE — o que o iPad reveza quando ninguem esta comprando.
+ *
+ * Mora no celular (`localStorage`) e viaja junto com o estado de repouso, em
+ * vez de morar no banco. Dois motivos: o display ja depende do celular para
+ * tudo o mais, e assim trocar o QR do Instagram no meio da feira nao depende
+ * de rede boa nem de tabela nova.
+ *
+ * Os enderecos comecam vazios de proposito. QR que leva ao perfil errado e
+ * pior que nenhum QR, entao o painel so entra no rodizio depois que o Felipe
+ * colar o endereco. Nada e adivinhado.
+ */
+export interface Vitrine {
+  /** Painel do video: liga/desliga e quanto tempo fica. */
+  video: boolean;
+  videoSeg: number;
+  instagram: string;
+  instagramSeg: number;
+  google: string;
+  googleSeg: number;
+}
+
+export const VITRINE_PADRAO: Vitrine = {
+  video: true,
+  videoSeg: 30,
+  instagram: "",
+  instagramSeg: 12,
+  google: "",
+  googleSeg: 12,
+};
+
+const VITRINE_KEY = "sunbite.display.vitrine";
+
+export function lerVitrine(): Vitrine {
+  try {
+    const raw = localStorage.getItem(VITRINE_KEY);
+    if (!raw) return VITRINE_PADRAO;
+    // Espalha por cima do padrao: chave nova numa versao futura do app nao
+    // deixa a vitrine de um aparelho antigo `undefined` no meio da feira.
+    return { ...VITRINE_PADRAO, ...(JSON.parse(raw) as Partial<Vitrine>) };
+  } catch {
+    return VITRINE_PADRAO;
+  }
+}
+
+export function gravarVitrine(v: Vitrine): void {
+  try {
+    localStorage.setItem(VITRINE_KEY, JSON.stringify(v));
+  } catch {
+    /* sem armazenamento: vale so nesta sessao */
+  }
+}
+
+/**
+ * Os paineis que de fato entram no rodizio, ja na ordem e com a duracao.
+ *
+ * Se a lista sair vazia — video desligado e nenhum endereco colado — o iPad
+ * volta ao video mesmo assim. Tela preta num balcao le como aparelho quebrado.
+ */
+export type PainelVitrine =
+  | { tipo: "video"; segundos: number }
+  | { tipo: "instagram"; segundos: number; url: string }
+  | { tipo: "google"; segundos: number; url: string };
+
+export function paineis(v: Vitrine): PainelVitrine[] {
+  const lista: PainelVitrine[] = [];
+  if (v.video) lista.push({ tipo: "video", segundos: Math.max(5, v.videoSeg) });
+  if (v.instagram.trim())
+    lista.push({ tipo: "instagram", segundos: Math.max(5, v.instagramSeg), url: v.instagram.trim() });
+  if (v.google.trim())
+    lista.push({ tipo: "google", segundos: Math.max(5, v.googleSeg), url: v.google.trim() });
+  return lista.length ? lista : [{ tipo: "video", segundos: 30 }];
+}
+
+/**
  * O que o iPad mostra. Cada `kind` e uma tela inteira, nao um pedaco:
  * o display nunca precisa juntar duas mensagens para saber o que desenhar,
  * e uma mensagem perdida no caminho e corrigida pela proxima, sem estado
  * acumulado para ficar torto.
  */
 export type EstadoDisplay =
-  /** Nenhum pedido em aberto: video em tela cheia. */
-  | { kind: "repouso" }
+  /** Nenhum pedido em aberto: a vitrine reveza em tela cheia. */
+  | { kind: "repouso"; vitrine?: Vitrine }
   /** Pedido montando: o video encolhe e continua rodando ao lado. */
   | { kind: "pedido"; cups: Cup[]; total: number }
   /** Pagamento escolhido. `recebido` so existe em dinheiro, e pode ser nulo. */

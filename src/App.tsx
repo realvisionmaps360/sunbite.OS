@@ -33,7 +33,7 @@ import {
 } from "./components/adminScreens";
 import { TOPPINGS } from "./config";
 import { deviceId, pendingSales, saveSale } from "./db";
-import { lerPar, type EstadoDisplay } from "./display/protocol";
+import { lerPar, lerVitrine, type EstadoDisplay } from "./display/protocol";
 import type { Emissor } from "./display/emit";
 import { LangToggle, useLang } from "./i18n";
 import { logEvent } from "./log";
@@ -212,20 +212,29 @@ export default function App() {
   // Abre o canal uma vez, se houver iPad pareado. `lerPar()` devolvendo null
   // e o que faz o `import()` nem acontecer — quem nao usa display nao baixa o
   // chunk nem paga o client do Supabase.
-  const emissor = useRef<Emissor | null>(null);
+  //
+  // ⚠️ `useState` e nao `useRef`, e isso e um defeito que o teste pegou: com
+  // ref, o efeito que calcula o estado do iPad rodava na primeira renderizacao
+  // — quando o `import()` ainda nao tinha voltado — via `null`, desistia, e
+  // nunca mais rodava, porque nada nas dependencias mudava. O iPad ficava no
+  // video ate alguem tocar no celular. Em estado, abrir o emissor dispara o
+  // efeito de novo e o primeiro estado sai na hora.
+  const [emissor, setEmissor] = useState<Emissor | null>(null);
   const ultimoEstado = useRef<EstadoDisplay["kind"] | null>(null);
   useEffect(() => {
     const codigo = lerPar();
     if (!codigo) return;
     let vivo = true;
+    let aberto: Emissor | null = null;
     void import("./display/emit").then((m) => {
       if (!vivo) return;
-      emissor.current = m.abrirEmissor(codigo);
+      aberto = m.abrirEmissor(codigo);
+      setEmissor(aberto);
     });
     return () => {
       vivo = false;
-      emissor.current?.fechar();
-      emissor.current = null;
+      aberto?.fechar();
+      setEmissor(null);
     };
   }, []);
 
@@ -233,7 +242,7 @@ export default function App() {
   // nenhuma tela do celular muda de comportamento por causa do display, e e
   // por isso que ele pode cair sem afetar a venda.
   useEffect(() => {
-    if (!emissor.current) return;
+    if (!emissor) return;
     let estado: EstadoDisplay;
     if (confirmation) {
       estado = { kind: "obrigado", total: confirmation.total };
@@ -245,9 +254,13 @@ export default function App() {
     ) {
       estado = { kind: "pedido", cups: order.cups, total: order.total };
     } else {
-      // Home, telas administrativas, pedido vazio: volta ao video. O cliente
+      // Home, telas administrativas, pedido vazio: volta a vitrine. O cliente
       // nao tem que ver o Financeiro da Sunbite.
-      estado = { kind: "repouso" };
+      //
+      // A vitrine viaja junto com o repouso, e nao numa mensagem propria: e o
+      // unico estado em que ela importa, e assim o iPad recebe a configuracao
+      // nova no primeiro instante em que teria como usa-la.
+      estado = { kind: "repouso", vitrine: lerVitrine() };
     }
     // ⚠️ O agradecimento e do iPad, e o celular nao pode atropela-lo.
     //
@@ -261,8 +274,8 @@ export default function App() {
     // agradecimento, e deve mesmo — o proximo cliente ja chegou.
     if (estado.kind === "repouso" && ultimoEstado.current === "obrigado") return;
     ultimoEstado.current = estado.kind;
-    emissor.current.enviar(estado);
-  }, [screen, payment, recebido, confirmation, order.cups, order.total]);
+    emissor.enviar(estado);
+  }, [emissor, screen, payment, recebido, confirmation, order.cups, order.total]);
 
   /**
    * Botão/gesto físico de voltar do celular (Android): sem isto, como o app

@@ -364,6 +364,82 @@ Da para rodar o esquema inteiro e conferir a conta com numeros, em vez de mandar
 rodar em producao as cegas. Foi o que confirmou que 10 copos com um topping dao exatamente
 1,560 kg de morango, e o que achou o caso do estoque negativo.
 
+## Customer Display — o iPad (Etapa 10)
+
+Segunda **pagina**, nao segunda rota: `display.html` + `src/display/`. O iPad carrega so o
+que o iPad precisa, e o pacote de entrada do celular **nao engorda um byte**. Conferido no
+`dist`: zero `phx_join` em `main-*.js` e em `preload-helper-*.js`.
+
+`App.tsx` continua sem importar `auth`/`supabase`, por tres caminhos que valem para qualquer
+coisa parecida no futuro:
+
+- `display/protocol.ts` e **puro** (nao importa Supabase nenhum) — igual a `cashbox.ts`;
+- o tipo `Emissor` entra por `import type`, que some no build;
+- `display/emit.ts` so e carregado por `import()` dinamico, e **so quando `lerPar()` devolve
+  um codigo**. Sem iPad pareado, o chunk nem e baixado.
+
+**Broadcast, nao `postgres_changes`.** O pedido em aberto vive no `useReducer` de `order.ts`
+e nunca toca o banco antes do Confirmar; o tempo real da Etapa 6 so enxerga o que ja esta
+gravado. Broadcast e mensagem efemera de aparelho para aparelho, sem escrita — que e
+exatamente o que o carrinho precisa e tudo o que o iPad precisa saber. Canal
+`display:<codigo>`.
+
+### Quatro defeitos que so o teste com dois aparelhos mostrou
+
+Nenhum deles aparecia no build, e cada um tem uma licao maior que ele mesmo:
+
+1. **O codigo do iPad era sorteado a cada carregamento.** Um reload do Safari matava o par
+   **em silencio**: o celular seguia falando num canal morto e o iPad mostrava um numero
+   novo. Hoje o codigo persiste (`codigoDoDisplay`), com "neuer Code" para trocar de
+   proposito. *Estado efemero num aparelho que fica ligado o dia inteiro e uma armadilha.*
+2. **O emissor ficava em `useRef`.** O efeito que calcula o estado do iPad rodava na
+   primeira renderizacao, via `null`, desistia — e nunca mais rodava, porque nada nas
+   dependencias mudava. Virou `useState`. *Recurso que chega por `await` nao pode viver em
+   ref se algum efeito depende dele.*
+3. **Broadcast nao tem historico.** O iPad que liga depois do celular nao recebe nada. O
+   emissor repete o estado atual a cada 8s (`BATIDA_MS`) — o que tambem faz o relogio de
+   silencio do iPad (`SILENCIO_MS`, 90s) so disparar quando o celular sumiu de verdade.
+4. **A batida quebrou o rodizio da vitrine.** Cada repeticao chegava como objeto novo, a
+   vitrine ganhava identidade nova, o `useMemo` recalculava e o rodizio voltava ao primeiro
+   painel — para sempre. O iPad compara o **conteudo** (`JSON.stringify`) antes de trocar.
+   *Quem repete estado tem que comparar valor, nunca referencia.*
+
+E um quinto, no celular: o "Danke!" piscava, porque a comemoracao do celular dura ~2s e o
+`confirmation` voltando a nulo mandava "repouso" na hora. **Quem manda no tempo do
+agradecimento e a tela que o cliente esta olhando**, nao a que a Romana opera — a guarda
+esta em `App.tsx`, e qualquer outra transicao (um copo novo) continua interrompendo.
+
+### A vitrine
+
+O que o iPad reveza no repouso: video, QR do Instagram, QR do Google, cada um com
+liga/desliga e duracao. Mora no `localStorage` do celular e **viaja junto com o estado de
+repouso** — nao tem tabela nova nem depende de rede boa para o Felipe trocar o QR no meio da
+feira. Tela em `components/DisplayScreen.tsx`, aberta pelos Ajustes.
+
+⚠️ **Painel de QR sem endereco nao entra no rodizio.** Nada e adivinhado: QR que leva ao
+perfil errado e pior que nenhum QR.
+
+### QR do TWINT com valor
+
+`display/qr.ts` monta um **Swiss QR-bill** (SPC v2.0) dentro do iPad, sem rede. `CONTA` em
+`display/config.ts` ainda e `null` — falta o IBAN da Sunbite —, e nesse estado o display
+**diz** que nao ha QR em vez de desenhar um codigo que nao leva a lugar nenhum.
+
+⚠️ **As linhas vazias do payload nao sao enfeite: a posicao e o significado.** Escrevi seis
+linhas no bloco do credor final onde o padrao pede sete, e o valor caiu na linha da moeda.
+Contar de cabeca nao funciona; ler o payload de volta e afirmar campo por campo, sim — foi
+assim que o defeito apareceu em vez de virar um QR recusado no balcao.
+
+### O video
+
+`VIDEO_REPOUSO` em `display/config.ts` e `null` hoje: enquanto nao houver arquivo, entra o
+cartaz `public/display/repouso.svg` com uma aproximacao lenta. Ligar o video e **uma linha**.
+Ele tem que ficar **dentro do iPad** (`mp4` esta no `globPatterns` do precache); passando de
+~40 MB, tirar do precache e baixar uma vez no Wi-Fi de casa.
+
+⚠️ `navigateFallbackDenylist: [/^\/display/]` no `vite.config.ts` **e obrigatorio**. Sem ele
+o service worker responde `index.html` para `/display` e o iPad abre o PDV.
+
 ## Como funciona offline
 
 A venda e gravada no **IndexedDB do celular** antes de qualquer coisa. Internet nunca

@@ -21,11 +21,24 @@ export interface Emissor {
   fechar(): void;
 }
 
+/**
+ * De quanto em quanto tempo o celular repete o estado atual.
+ *
+ * ⚠️ Isto nao e enfeite, e um defeito que apareceu no teste: broadcast e
+ * mensagem solta, sem historico. O iPad que liga DEPOIS do celular nao recebe
+ * nada — ficava no video mostrando a vitrine velha, e so acordava quando
+ * alguem tocava no celular. Repetir o estado resolve os dois lados: o iPad
+ * que chega atrasado se acerta em segundos, e o relogio de silencio dele
+ * (`SILENCIO_MS`) so dispara quando o celular realmente sumiu.
+ */
+const BATIDA_MS = 8000;
+
 export function abrirEmissor(codigo: string): Emissor {
   let vivo = true;
   let pronto = false;
-  /** Ultimo estado, guardado enquanto o canal ainda esta subindo. */
+  /** Ultimo estado: serve para a espera do canal E para a batida. */
   let atrasado: EstadoDisplay | null = null;
+  let ultimo: EstadoDisplay | null = null;
   let enviarDeVerdade: ((e: EstadoDisplay) => void) | null = null;
   let fecharCanal: (() => void) | null = null;
 
@@ -57,14 +70,20 @@ export function abrirEmissor(codigo: string): Emissor {
     }
   })();
 
+  const batida = window.setInterval(() => {
+    if (vivo && pronto && ultimo && enviarDeVerdade) enviarDeVerdade(ultimo);
+  }, BATIDA_MS);
+
   return {
     enviar(estado) {
       if (!vivo) return;
+      ultimo = estado;
       if (pronto && enviarDeVerdade) enviarDeVerdade(estado);
       else atrasado = estado;
     },
     fechar() {
       vivo = false;
+      window.clearInterval(batida);
       fecharCanal?.();
       fecharCanal = null;
       enviarDeVerdade = null;

@@ -133,6 +133,20 @@ const result = (table) => {
 export function getSupabase() {
   return Promise.resolve({
     from: (table) => result(table),
+    // A tela de Operacao chama subscribeRealtime() ao montar. Sem channel()
+    // aqui, ela estourava "supabase.channel is not a function" — um erro que
+    // NAO existe em producao, e que so aparecia porque o mock nao sabia fazer
+    // isto. Ensinar o mock, nunca contornar: assina de mentira, nao emite
+    // evento nenhum, e devolve o mesmo formato que removeChannel() espera.
+    channel: () => {
+      const ch = {
+        on: () => ch,
+        subscribe: (cb) => { cb?.("SUBSCRIBED"); return ch; },
+        send: () => Promise.resolve("ok"),
+      };
+      return ch;
+    },
+    removeChannel: () => Promise.resolve("ok"),
     // Fatia 6: a IA responde de mentira, para a tela poder ser vista sem
     // gastar chamada de verdade nem sujar o banco.
     functions: {
@@ -163,6 +177,7 @@ import "./index.css";
 import FinanceScreen from "./components/FinanceScreen.tsx";
 import StockScreen from "./components/StockScreen.tsx";
 import AIScreen from "./components/AIScreen.tsx";
+import OperationScreen from "./components/OperationScreen.tsx";
 import { LangProvider } from "./i18n.tsx";
 
 // Abre direto na tela do ?screen=, no idioma do ?lang= — o unico jeito de
@@ -170,7 +185,7 @@ import { LangProvider } from "./i18n.tsx";
 const params = new URLSearchParams(location.search);
 const lang = params.get("lang");
 if (lang === "de" || lang === "pt") localStorage.setItem("sunbite.lang", lang);
-const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen };
+const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen };
 const Tela = SCREENS[params.get("screen")] ?? FinanceScreen;
 
 // ?click=N abre sozinho o N-esimo "?" da tela, para fotografar a caixinha

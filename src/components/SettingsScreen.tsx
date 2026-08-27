@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { money } from "../config";
 import { allSales, deleteToday, deviceId, today } from "../db";
-import {
-  apagarPar,
-  codigoValido,
-  gravarPar,
-  lerPar,
-} from "../display/protocol";
+import { DisplayScreen } from "./DisplayScreen";
 import { useLang } from "../i18n";
 import { getCupPrice, getToppingPrice } from "../prices";
 import { loadConfig, syncNow } from "../sync";
@@ -38,6 +33,7 @@ export function SettingsScreen({
   const [msg, setMsg] = useState("");
   const [todayCount, setTodayCount] = useState(0);
   const [asking, setAsking] = useState(false);
+  const [display, setDisplay] = useState(false);
 
   useEffect(() => {
     void allSales().then((rows) =>
@@ -103,7 +99,15 @@ export function SettingsScreen({
           <TileButton emoji="🔄" label={t("settings.sync")} variant="outline" onClick={() => void handleSync()} />
         </Card>
 
-        <Pareamento aviso={setMsg} />
+        {/* Tela propria, e nao um cartao aqui dentro: parear o iPad, escolher
+            o que ele reveza e colar os enderecos dos QR nao cabem num cartao
+            sem virar um formulario espremido no meio dos Ajustes. */}
+        <TileButton
+          emoji="📺"
+          label={t("display.title")}
+          variant="outline"
+          onClick={() => setDisplay(true)}
+        />
 
         <TileButton emoji="🛠️" label={t("settings.system")} variant="outline" onClick={onOpenSystem} />
 
@@ -153,86 +157,8 @@ export function SettingsScreen({
           {t("settings.device", { id: deviceId().slice(0, 8) })}
         </p>
       </div>
+
+      {display && <DisplayScreen onClose={() => setDisplay(false)} />}
     </div>
-  );
-}
-
-/**
- * Parear o iPad da tela do cliente (Etapa 10).
- *
- * Fica nos Ajustes, e nao na Home, de proposito: parear acontece uma vez por
- * feira, e nada que a mao encosta durante o atendimento pode levar aqui.
- *
- * ⚠️ Este componente so escreve no `localStorage`. Quem abre canal e fala com
- * o Supabase e `display/emit.ts`, carregado por `App.tsx` sob demanda — os
- * Ajustes nao podem arrastar o client do Supabase para dentro deste chunk.
- */
-function Pareamento({ aviso }: { aviso: (s: string) => void }) {
-  const { t } = useLang();
-  const [par, setPar] = useState<string | null>(lerPar);
-  const [campo, setCampo] = useState("");
-  const cfg = loadConfig();
-
-  function parear() {
-    const codigo = campo.trim();
-    if (!codigoValido(codigo)) {
-      aviso(t("display.invalid"));
-      return;
-    }
-    gravarPar(codigo);
-    setPar(codigo);
-    setCampo("");
-    // Recarrega porque o emissor abre uma vez, no `useEffect` de montagem do
-    // App: sem isto o par so valeria na proxima abertura do app — e o Felipe
-    // ficaria olhando um iPad parado sem saber por que.
-    location.reload();
-  }
-
-  return (
-    <Card>
-      <h2 className="font-display text-xl">{t("display.title")}</h2>
-
-      {!cfg && (
-        <p className="text-sm text-ink-muted">{t("display.needsConfig")}</p>
-      )}
-
-      {par ? (
-        <>
-          <p className="text-sm font-semibold text-green-800">
-            ✓ {t("display.paired", { code: par })}
-          </p>
-          <TileButton
-            emoji="🔌"
-            label={t("display.unpair")}
-            variant="outline"
-            onClick={() => {
-              apagarPar();
-              setPar(null);
-              location.reload();
-            }}
-          />
-        </>
-      ) : (
-        <>
-          <p className="text-sm text-ink-muted">{t("display.hint")}</p>
-          <label className="block text-sm">
-            <span className="text-ink-muted">{t("display.code")}</span>
-            <input
-              value={campo}
-              onChange={(e) => setCampo(e.target.value.replace(/\D/g, ""))}
-              inputMode="numeric"
-              maxLength={4}
-              className="mt-1 w-full rounded-2xl border border-black/15 bg-white px-4 py-3 text-2xl tabular-nums tracking-[0.4em]"
-            />
-          </label>
-          <TileButton
-            emoji="📺"
-            label={t("display.pair")}
-            variant="outline"
-            onClick={parear}
-          />
-        </>
-      )}
-    </Card>
   );
 }

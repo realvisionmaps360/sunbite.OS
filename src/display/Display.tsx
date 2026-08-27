@@ -3,12 +3,16 @@ import { money, toppingEmoji } from "../config";
 import { STRINGS } from "../i18n";
 import { loadConfig } from "../sync";
 import { CARTAZ_REPOUSO, VIDEO_REPOUSO } from "./config";
-import { qrDoValor } from "./qr";
+import { qrDoValor, svgDoQR } from "./qr";
 import {
   OBRIGADO_MS,
+  VITRINE_PADRAO,
   codigoDoDisplay,
+  paineis,
   trocarCodigo,
   type EstadoDisplay,
+  type PainelVitrine,
+  type Vitrine,
 } from "./protocol";
 import { ouvir, type Conexao } from "./link";
 
@@ -49,6 +53,37 @@ export function Display() {
 
   const repouso = estado.kind === "repouso";
 
+  /**
+   * A vitrine que o celular mandou, guardada no proprio iPad.
+   *
+   * Guardar importa: se o iPad recarregar antes de o celular mandar o primeiro
+   * repouso, ele volta com a vitrine de sempre em vez de cair no padrao e
+   * "esquecer" o QR do Instagram no meio da feira.
+   */
+  const [vitrine, setVitrine] = useState<Vitrine>(() => {
+    try {
+      const raw = localStorage.getItem("sunbite.display.vitrine.cache");
+      return raw ? { ...VITRINE_PADRAO, ...JSON.parse(raw) } : VITRINE_PADRAO;
+    } catch {
+      return VITRINE_PADRAO;
+    }
+  });
+  useEffect(() => {
+    if (estado.kind !== "repouso" || !estado.vitrine) return;
+    const novo = JSON.stringify(estado.vitrine);
+    // ⚠️ So troca quando o CONTEUDO mudou. O celular repete o estado a cada 8s
+    // (a batida do emissor), e cada repeticao chega como um objeto novo: se
+    // isto gravasse sempre, a vitrine ganhava identidade nova a cada batida, o
+    // rodizio voltava ao primeiro painel e o iPad ficava preso no Instagram
+    // para sempre. Foi exatamente o que aconteceu no teste.
+    setVitrine((atual) => (JSON.stringify(atual) === novo ? atual : estado.vitrine!));
+    try {
+      localStorage.setItem("sunbite.display.vitrine.cache", novo);
+    } catch {
+      /* sem armazenamento: vale so enquanto a pagina estiver aberta */
+    }
+  }, [estado]);
+
   return (
     <div className="flex h-full w-full overflow-hidden bg-brand-dark text-cream">
       {/* O video NUNCA desmonta — so muda de largura. Remontar reiniciaria o
@@ -61,6 +96,10 @@ export function Display() {
         }`}
       >
         <Video />
+        {/* O rodizio da vitrine so existe no repouso. Durante a venda o video
+            volta sozinho: um QR do Instagram por cima do pedido seria roubar a
+            atencao de quem esta pagando. */}
+        {repouso && <Rodizio vitrine={vitrine} />}
         {repouso && (
           <Pareamento
             codigo={codigo}
@@ -119,6 +158,65 @@ function Video() {
       playsInline
       poster={CARTAZ_REPOUSO}
     />
+  );
+}
+
+/**
+ * O rodizio da vitrine: video → Instagram → Google → video…
+ *
+ * Fica POR CIMA do video, e o video nunca desmonta por baixo. Trocar de
+ * painel remontando o `<video>` reiniciaria o arquivo a cada volta, e um
+ * video que recomeca do zero a cada 40 segundos e pior que nenhum.
+ *
+ * O painel de video e simplesmente "nao mostrar nada aqui" — o que aparece e
+ * o video que ja estava rodando.
+ */
+function Rodizio({ vitrine }: { vitrine: Vitrine }) {
+  // A chave e o conteudo, nao o objeto: e o que garante que o rodizio so
+  // recomeca quando o Felipe muda de verdade a vitrine nos Ajustes.
+  const chave = JSON.stringify(vitrine);
+  const lista = useMemo(() => paineis(vitrine), [chave]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [i, setI] = useState(0);
+
+  useEffect(() => {
+    setI(0);
+  }, [chave]);
+
+  useEffect(() => {
+    if (lista.length < 2) return; // um painel so nao reveza
+    const atual = lista[i % lista.length];
+    const id = window.setTimeout(
+      () => setI((n) => (n + 1) % lista.length),
+      atual.segundos * 1000,
+    );
+    return () => window.clearTimeout(id);
+  }, [i, lista]);
+
+  const painel = lista[i % lista.length];
+  if (!painel || painel.tipo === "video") return null;
+  return <PainelQR painel={painel} />;
+}
+
+function PainelQR({ painel }: { painel: Extract<PainelVitrine, { url: string }> }) {
+  const svg = useMemo(() => svgDoQR(painel.url), [painel.url]);
+  const info =
+    painel.tipo === "instagram"
+      ? { emoji: "📸", titulo: "Folgt uns", sub: "@sunbite" }
+      : { emoji: "⭐", titulo: "Hat's geschmeckt?", sub: "Bewertet uns auf Google" };
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-brand-dark/94 p-10 text-center text-cream backdrop-blur-sm">
+      <p className="text-[5rem] leading-none">{info.emoji}</p>
+      <p className="font-display text-[clamp(2.5rem,6vw,4.5rem)] leading-none">
+        {info.titulo}
+      </p>
+      <div
+        className="w-[min(46vh,22rem)] rounded-3xl bg-white p-5"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <p className="text-2xl text-cream/70">{info.sub}</p>
+    </div>
   );
 }
 

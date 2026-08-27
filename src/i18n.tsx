@@ -140,6 +140,22 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "display.invalid": "O código tem 4 números.",
     "display.needsConfig":
       "Precisa do Supabase configurado: a tela do cliente é a única parte do app que exige internet.",
+    "display.pairTitle": "O iPad",
+    "display.showcase": "O que aparece parado",
+    "display.showcaseHint":
+      "Quando ninguém está comprando, o iPad reveza entre o que estiver ligado aqui. Assim que alguém pede, ele mostra o pedido sozinho.",
+    "display.panel.video": "Vídeo",
+    "display.panel.instagram": "QR do Instagram",
+    "display.panel.google": "QR do Google",
+    "display.on": "Ligado",
+    "display.off": "Desligado",
+    "display.needsUrl": "Falta o endereço",
+    "display.seconds": "Tempo na tela",
+    "display.cycle": "Vai revezar: {lista}. A volta inteira leva {total}s.",
+    "display.save": "Salvar e mandar para o iPad",
+    "display.saved": "Salvo. O iPad muda em segundos.",
+    "display.footnote":
+      "Cole o endereço exato do perfil. QR que leva ao lugar errado é pior que nenhum QR.",
 
     "menu.title": "Cardápio",
     "menu.cup": "Copo de morango com chocolate suíço",
@@ -614,6 +630,22 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "display.invalid": "Der Code hat vier Ziffern.",
     "display.needsConfig":
       "Supabase muss konfiguriert sein: die Kundenanzeige ist der einzige Teil der App, der Internet braucht.",
+    "display.pairTitle": "Das iPad",
+    "display.showcase": "Was im Leerlauf läuft",
+    "display.showcaseHint":
+      "Wenn niemand kauft, wechselt das iPad zwischen dem, was hier eingeschaltet ist. Sobald jemand bestellt, zeigt es von selbst die Bestellung.",
+    "display.panel.video": "Video",
+    "display.panel.instagram": "Instagram-QR",
+    "display.panel.google": "Google-QR",
+    "display.on": "Ein",
+    "display.off": "Aus",
+    "display.needsUrl": "Adresse fehlt",
+    "display.seconds": "Dauer",
+    "display.cycle": "Wechselt: {lista}. Eine Runde dauert {total}s.",
+    "display.save": "Speichern und ans iPad senden",
+    "display.saved": "Gespeichert. Das iPad wechselt in Sekunden.",
+    "display.footnote":
+      "Genaue Profiladresse einfügen. Ein QR, der falsch führt, ist schlimmer als gar keiner.",
 
     "menu.title": "Karte",
     "menu.cup": "Erdbeerbecher mit Schweizer Schokolade",
