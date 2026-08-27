@@ -33,6 +33,8 @@ import {
 } from "./components/adminScreens";
 import { TOPPINGS } from "./config";
 import { deviceId, pendingSales, saveSale } from "./db";
+import { lerPar, type EstadoDisplay } from "./display/protocol";
+import type { Emissor } from "./display/emit";
 import { LangToggle, useLang } from "./i18n";
 import { logEvent } from "./log";
 import { getCachedOpenOperationId, refreshOpenOperationId } from "./operations";
@@ -43,6 +45,12 @@ import type { Payment, Sale } from "./types";
 
 // Este arquivo nunca importa ./auth nem ./supabase, em lugar nenhum — e essa
 // ausencia, nao um `if`, que garante que a venda nao depende de login.
+//
+// O Customer Display (Etapa 10) respeita a mesma regra por dois caminhos:
+// `display/protocol.ts` e puro (nao importa Supabase nenhum) e o tipo
+// `Emissor` e importado com `import type`, que some no build. Quem carrega o
+// Supabase e `display/emit.ts`, por `import()` dinamico e **so quando existe
+// um iPad pareado**. Sem par, o chunk nem e baixado.
 // SystemScreen tambem nao exige sessao (funciona offline/deslogada), entao
 // nao entra no barril adminScreens.ts — tem seu proprio lazy() aqui.
 const SystemScreen = lazy(() => import("./components/SystemScreen"));
@@ -148,6 +156,12 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [occurrence, setOccurrence] = useState(false);
+  /**
+   * Quanto o cliente deu, em dinheiro. Opcional, e so existe para o iPad
+   * mostrar o troco — o PDV nunca precisou disto e continua nao precisando.
+   * Nao entra em `Sale`, nao vai para o banco, some ao fim da venda.
+   */
+  const [recebido, setRecebido] = useState<number | null>(null);
   const errorTimer = useRef<number | undefined>(undefined);
   // Marca se a ultima tentativa de sync falhou, so para saber quando logar
   // a RECUPERACAO (Etapa 5) — nao muda syncNow() nem o que ele retorna.
@@ -192,6 +206,63 @@ export default function App() {
       window.removeEventListener("online", attempt);
     };
   }, [refreshPending]);
+
+  // ── Customer Display (Etapa 10) ───────────────────────────────────────────
+  //
+  // Abre o canal uma vez, se houver iPad pareado. `lerPar()` devolvendo null
+  // e o que faz o `import()` nem acontecer — quem nao usa display nao baixa o
+  // chunk nem paga o client do Supabase.
+  const emissor = useRef<Emissor | null>(null);
+  const ultimoEstado = useRef<EstadoDisplay["kind"] | null>(null);
+  useEffect(() => {
+    const codigo = lerPar();
+    if (!codigo) return;
+    let vivo = true;
+    void import("./display/emit").then((m) => {
+      if (!vivo) return;
+      emissor.current = m.abrirEmissor(codigo);
+    });
+    return () => {
+      vivo = false;
+      emissor.current?.fechar();
+      emissor.current = null;
+    };
+  }, []);
+
+  // O que o iPad deve estar mostrando agora. Derivado do estado que ja existe:
+  // nenhuma tela do celular muda de comportamento por causa do display, e e
+  // por isso que ele pode cair sem afetar a venda.
+  useEffect(() => {
+    if (!emissor.current) return;
+    let estado: EstadoDisplay;
+    if (confirmation) {
+      estado = { kind: "obrigado", total: confirmation.total };
+    } else if (screen === "review" && payment) {
+      estado = { kind: "pagamento", payment, total: order.total, recebido };
+    } else if (
+      (screen === "sale" || screen === "payment") &&
+      order.cups.length > 0
+    ) {
+      estado = { kind: "pedido", cups: order.cups, total: order.total };
+    } else {
+      // Home, telas administrativas, pedido vazio: volta ao video. O cliente
+      // nao tem que ver o Financeiro da Sunbite.
+      estado = { kind: "repouso" };
+    }
+    // ⚠️ O agradecimento e do iPad, e o celular nao pode atropela-lo.
+    //
+    // Achado no teste, nao no projeto: a comemoracao do celular dura ~2s e
+    // some sozinha, e o `confirmation` voltando a nulo mandava "repouso" na
+    // hora — o "Danke!" piscava e sumia antes de o cliente ler. Quem manda no
+    // tempo do agradecimento e a tela que o cliente esta olhando
+    // (`OBRIGADO_MS` em protocol.ts), nao a que a Romana esta operando.
+    //
+    // Qualquer outra transicao passa normalmente: um copo novo interrompe o
+    // agradecimento, e deve mesmo — o proximo cliente ja chegou.
+    if (estado.kind === "repouso" && ultimoEstado.current === "obrigado") return;
+    ultimoEstado.current = estado.kind;
+    emissor.current.enviar(estado);
+  }, [screen, payment, recebido, confirmation, order.cups, order.total]);
 
   /**
    * Botão/gesto físico de voltar do celular (Android): sem isto, como o app
@@ -270,6 +341,7 @@ export default function App() {
   /** Escolher o pagamento não grava nada: só leva para a conferência. */
   function choosePayment(p: Payment) {
     setPayment(p);
+    setRecebido(null);
     setScreen("review");
   }
 
@@ -307,6 +379,7 @@ export default function App() {
     });
     order.reset();
     setPayment(null);
+    setRecebido(null);
     setScreen("sale");
     void refreshPending();
     void syncNow().then((r) => {
@@ -435,10 +508,13 @@ export default function App() {
           cups={order.cups}
           total={order.total}
           payment={payment}
+          recebido={recebido}
+          onRecebido={setRecebido}
           onConfirm={commitSale}
           onBack={() => {
             // Volta o pedido intacto: nada foi gravado ate aqui.
             setPayment(null);
+            setRecebido(null);
             setScreen("sale");
           }}
         />

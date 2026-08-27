@@ -56,3 +56,12 @@ button {
   font-family: inherit;
   touch-action: manipulation;
 }
+
+/*
+ * Customer Display: enquanto o video de IA nao existe, o cartaz do repouso
+ * respira devagar. Tela parada num balcao le como aparelho travado.
+ */
+@keyframes respira {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}

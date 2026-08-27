@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -20,6 +21,18 @@ const APP_VERSION =
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
+  build: {
+    rollupOptions: {
+      // Duas paginas, nao duas rotas (Etapa 10). O iPad carrega
+      // `display.html` e baixa so o que a tela do cliente precisa; o pacote de
+      // entrada do celular continua sem o client do Supabase. Se isto virar
+      // uma rota de `App.tsx` um dia, essa promessa cai junto.
+      input: {
+        main: resolve(import.meta.dirname, "index.html"),
+        display: resolve(import.meta.dirname, "display.html"),
+      },
+    },
   },
   plugins: [
     react(),
@@ -51,8 +64,17 @@ export default defineConfig({
       },
       workbox: {
         // Tudo precacheado: depois da primeira visita o app abre sem rede.
-        globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
+        // mp4 entra por causa do video do Customer Display: ele TEM que ficar
+        // dentro do iPad, nunca baixando pela rede no meio da feira. Se o
+        // video definitivo passar de ~40 MB, tirar `mp4` daqui e deixar o iPad
+        // baixar uma vez no Wi-Fi de casa — precachear centenas de MB trava a
+        // primeira abertura do app.
+        globPatterns: ["**/*.{js,css,html,png,svg,woff2,mp4}"],
         navigateFallback: "index.html",
+        // Sem isto o service worker responde `index.html` para /display e o
+        // iPad abre o PDV. O denylist e o que faz a segunda pagina continuar
+        // existindo depois de o app estar instalado.
+        navigateFallbackDenylist: [/^\/display/],
         cleanupOutdatedCaches: true,
       },
     }),

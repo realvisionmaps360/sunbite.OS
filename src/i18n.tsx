@@ -14,7 +14,14 @@ export type Lang = "pt" | "de";
  * a venda grava topping por id (almond, coconut, cream) e valor em CHF,
  * entao trocar de idioma nao mexe em nenhum dado ja registrado.
  */
-const STRINGS: Record<Lang, Record<string, string>> = {
+/**
+ * Exportado (e nao so usado pelo `t()` daqui) por causa do Customer Display:
+ * ele e uma pagina separada, sem `<LangProvider>` e sem botao de idioma — o
+ * cliente na frente do iPad le alemao e pronto. Mas os nomes dos toppings tem
+ * que ser os mesmos que a Romana ve no celular, entao o display **le daqui**
+ * em vez de manter uma segunda copia que um dia discordaria desta.
+ */
+export const STRINGS: Record<Lang, Record<string, string>> = {
   pt: {
     "nav.home": "Início",
     "status.synced": "sincronizado",
@@ -123,6 +130,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.resetNone": "Nenhuma venda hoje.",
     "settings.system": "Sistema",
 
+    "display.title": "Tela do cliente",
+    "display.hint":
+      "Abra sunbite-pdv.vercel.app/display.html no iPad. Ele mostra um código de 4 números — escreva esse código aqui.",
+    "display.code": "Código do iPad",
+    "display.pair": "Parear",
+    "display.paired": "Pareado com o iPad {code}.",
+    "display.unpair": "Desparear",
+    "display.invalid": "O código tem 4 números.",
+    "display.needsConfig":
+      "Precisa do Supabase configurado: a tela do cliente é a única parte do app que exige internet.",
+
     "menu.title": "Cardápio",
     "menu.cup": "Copo de morango com chocolate suíço",
     "menu.cupDesc": "Morangos frescos, chocolate quente na hora, montado na sua frente.",
@@ -141,6 +159,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "review.payment": "Pagamento",
     "review.confirm": "Confirmar venda",
     "review.back": "Voltar ao pedido",
+    "review.given": "Quanto o cliente deu",
+    "review.exact": "Certo",
+    "review.change": "Troco",
 
     "confirm.next": "toque para o próximo cliente",
     "error.save": "ERRO ao salvar: {msg}",
@@ -583,6 +604,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.resetNone": "Heute keine Verkäufe.",
     "settings.system": "System",
 
+    "display.title": "Kundenanzeige",
+    "display.hint":
+      "Öffne sunbite-pdv.vercel.app/display.html auf dem iPad. Dort erscheint ein vierstelliger Code — gib ihn hier ein.",
+    "display.code": "Code vom iPad",
+    "display.pair": "Verbinden",
+    "display.paired": "Mit iPad {code} verbunden.",
+    "display.unpair": "Trennen",
+    "display.invalid": "Der Code hat vier Ziffern.",
+    "display.needsConfig":
+      "Supabase muss konfiguriert sein: die Kundenanzeige ist der einzige Teil der App, der Internet braucht.",
+
     "menu.title": "Karte",
     "menu.cup": "Erdbeerbecher mit Schweizer Schokolade",
     "menu.cupDesc": "Frische Erdbeeren, warme Schokolade, frisch vor Ihren Augen zubereitet.",
@@ -601,6 +633,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "review.payment": "Zahlung",
     "review.confirm": "Verkauf bestätigen",
     "review.back": "Zurück zur Bestellung",
+    "review.given": "Erhalten",
+    "review.exact": "Passend",
+    "review.change": "Rückgeld",
 
     "confirm.next": "tippen für den nächsten Kunden",
     "error.save": "FEHLER beim Speichern: {msg}",
