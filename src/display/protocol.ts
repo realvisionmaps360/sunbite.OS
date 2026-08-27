@@ -193,8 +193,25 @@ export function paineis(v: Vitrine): PainelVitrine[] {
 export type EstadoDisplay =
   /** Nenhum pedido em aberto: a vitrine reveza em tela cheia. */
   | { kind: "repouso"; vitrine?: Vitrine }
-  /** Pedido montando: o video encolhe e continua rodando ao lado. */
-  | { kind: "pedido"; cups: Cup[]; total: number }
+  /**
+   * Pedido montando: o video encolhe e continua rodando ao lado.
+   *
+   * `precoCopo` e `precoTopping` viajam junto de proposito. O iPad precisa
+   * deles para **abrir a conta** linha por linha (decisao do Felipe, 27/08:
+   * o cliente ve de onde veio cada franco), e o preco mora no banco desde a
+   * DEC-2026-005 — pode mudar no meio da temporada. Mandar o numero em vez de
+   * o iPad ter a propria copia e o que impede as duas telas de discordarem.
+   *
+   * Opcionais para o iPad novo nao quebrar recebendo mensagem de um celular
+   * que ainda nao atualizou: sem eles a linha mostra so o nome, sem preco.
+   */
+  | {
+      kind: "pedido";
+      cups: Cup[];
+      total: number;
+      precoCopo?: number;
+      precoTopping?: number;
+    }
   /** Pagamento escolhido. `recebido` so existe em dinheiro, e pode ser nulo. */
   | { kind: "pagamento"; payment: Payment; total: number; recebido: number | null }
   /** Venda gravada: agradecimento, e o iPad volta ao repouso sozinho. */

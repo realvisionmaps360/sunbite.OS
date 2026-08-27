@@ -39,7 +39,7 @@ import { LangToggle, useLang } from "./i18n";
 import { logEvent } from "./log";
 import { getCachedOpenOperationId, refreshOpenOperationId } from "./operations";
 import { useOrder } from "./order";
-import { refreshPrices } from "./prices";
+import { getCupPrice, getToppingPrice, refreshPrices } from "./prices";
 import { loadConfig, syncNow } from "./sync";
 import type { Payment, Sale } from "./types";
 
@@ -251,7 +251,15 @@ export default function App() {
       (screen === "sale" || screen === "payment") &&
       order.cups.length > 0
     ) {
-      estado = { kind: "pedido", cups: order.cups, total: order.total };
+      estado = {
+        kind: "pedido",
+        cups: order.cups,
+        total: order.total,
+        // O iPad abre a conta linha por linha, e o preco mora no banco:
+        // mandar o numero e o que impede as duas telas de discordarem.
+        precoCopo: getCupPrice(),
+        precoTopping: getToppingPrice(),
+      };
     } else {
       // Home, telas administrativas, pedido vazio: volta a vitrine. O cliente
       // nao tem que ver o Financeiro da Sunbite.

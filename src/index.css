@@ -89,3 +89,14 @@ button {
   0%, 100% { transform: scale(1) rotate(-2deg); }
   50%      { transform: scale(1.07) rotate(2deg); }
 }
+
+
+/*
+ * Customer Display: o calor do degrade do Instagram respira no canto.
+ * A base roxa fica parada; so o brilho quente se move. Degrade grande e
+ * imovel numa tela de balcao vira um borrao; com movimento lento le como luz.
+ */
+@keyframes brilhoInsta {
+  0%, 100% { transform: scale(1) translate(0, 0); opacity: .95; }
+  50%      { transform: scale(1.18) translate(4%, -5%); opacity: 1; }
+}
