@@ -116,9 +116,8 @@ export const EVENTO = "estado";
  * tudo o mais, e assim trocar o QR do Instagram no meio da feira nao depende
  * de rede boa nem de tabela nova.
  *
- * Os enderecos comecam vazios de proposito. QR que leva ao perfil errado e
- * pior que nenhum QR, entao o painel so entra no rodizio depois que o Felipe
- * colar o endereco. Nada e adivinhado.
+ * Painel de QR **sem endereco nao entra no rodizio**. Nada e adivinhado: QR
+ * que leva ao perfil errado e pior que nenhum QR.
  */
 export interface Vitrine {
   /** Painel do video: liga/desliga e quanto tempo fica. */
@@ -133,9 +132,12 @@ export interface Vitrine {
 export const VITRINE_PADRAO: Vitrine = {
   video: true,
   videoSeg: 30,
-  instagram: "",
+  // Os dois enderecos vieram do Felipe em 27/08. Ficam aqui como PARTIDA, e
+  // nao travados: a tela de Ajustes sobrescreve, e e por ela que se troca.
+  // Mesma ideia do preco em `config.ts` depois da DEC-2026-005.
+  instagram: "https://www.instagram.com/sunbite.ch",
   instagramSeg: 12,
-  google: "",
+  google: "https://g.page/r/CRZeFDUuWrjbEBI/review",
   googleSeg: 12,
 };
 

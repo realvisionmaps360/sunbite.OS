@@ -58,10 +58,34 @@ button {
 }
 
 /*
- * Customer Display: enquanto o video de IA nao existe, o cartaz do repouso
- * respira devagar. Tela parada num balcao le como aparelho travado.
+ * Customer Display: enquanto o video nao existe, a cena de repouso se mexe
+ * sozinha. Tela parada num balcao le como aparelho travado — e um cartaz
+ * imovel por 30 segundos e pior do que nada.
+ *
+ * Tudo em CSS, de proposito: zero download, e o Safari do iPad nao precisa de
+ * codec nenhum. `prefers-reduced-motion` do proprio Tailwind nao alcanca isto,
+ * mas o display e uma tela que ninguem toca — nao ha enjoo de rolagem aqui.
  */
 @keyframes respira {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.08); }
+}
+
+/* Frutas atravessando a tela de baixo para cima, com uma deriva lateral. */
+@keyframes subir {
+  0%   { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10%  { opacity: .28; }
+  90%  { opacity: .28; }
+  100% { transform: translate(60px, -140vh) rotate(220deg); opacity: 0; }
+}
+
+/* O fundo desliza devagar, para o vermelho nunca ficar chapado. */
+@keyframes maré {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-4%, 3%) scale(1.12); }
+}
+
+@keyframes pulsar {
+  0%, 100% { transform: scale(1) rotate(-2deg); }
+  50%      { transform: scale(1.07) rotate(2deg); }
 }

@@ -38,10 +38,27 @@ export function Display() {
       setConexao("caiu");
       return;
     }
-    return ouvir(codigo, setEstado, setConexao);
+    return ouvir(
+      codigo,
+      (novo) =>
+        setEstado((atual) => {
+          // ⚠️ O relogio do agradecimento e daqui, e so daqui.
+          //
+          // A comemoracao do celular dura ~2s e some; o "repouso" que vem logo
+          // atras chegaria antes de o cliente ler o "Danke!". Entao o iPad
+          // **ignora** repouso enquanto esta agradecendo — o proprio timer
+          // abaixo o tira da tela na hora certa.
+          //
+          // Um pedido novo (ou um pagamento) passa na hora, e deve passar: o
+          // proximo cliente ja chegou.
+          if (atual.kind === "obrigado" && novo.kind === "repouso") return atual;
+          return novo;
+        }),
+      setConexao,
+    );
   }, [codigo]);
 
-  // O "obrigado" volta ao video sozinho. Ninguem toca neste iPad.
+  // O "obrigado" volta a vitrine sozinho. Ninguem toca neste iPad.
   useEffect(() => {
     if (estado.kind !== "obrigado") return;
     const id = window.setTimeout(
@@ -135,17 +152,14 @@ function Video() {
     return () => document.removeEventListener("visibilitychange", tocar);
   }, []);
 
-  // Sem video ainda: o cartaz, com uma aproximacao lenta so para a tela nao
-  // ficar morta. Trocar por video e uma linha em `config.ts`.
-  if (!VIDEO_REPOUSO) {
-    return (
-      <img
-        src={CARTAZ_REPOUSO}
-        alt=""
-        className="h-full w-full animate-[respira_18s_ease-in-out_infinite] object-cover"
-      />
-    );
-  }
+  // Sem arquivo de video ainda: uma cena que se mexe, feita so de CSS.
+  //
+  // Nao e o video definitivo e nem tenta ser — e o lugar dele, ocupado por
+  // algo vivo. Tela parada num balcao le como aparelho travado, e um cartaz
+  // imovel por 30 segundos e pior que nada. Zero bytes de download, roda no
+  // Safari do iPad sem codec nenhum. Trocar pelo video de verdade continua
+  // sendo **uma linha** em `config.ts`.
+  if (!VIDEO_REPOUSO) return <CenaPlaceholder />;
 
   return (
     <video
@@ -158,6 +172,51 @@ function Video() {
       playsInline
       poster={CARTAZ_REPOUSO}
     />
+  );
+}
+
+/** Frutas que atravessam a tela devagar, cada uma no seu tempo. */
+const FLUTUANTES = [
+  { emoji: "🍓", left: "8%", dur: 26, delay: 0, tam: "7rem" },
+  { emoji: "🍫", left: "24%", dur: 34, delay: 6, tam: "5rem" },
+  { emoji: "🍓", left: "46%", dur: 30, delay: 12, tam: "9rem" },
+  { emoji: "🥥", left: "66%", dur: 38, delay: 3, tam: "5.5rem" },
+  { emoji: "🍓", left: "82%", dur: 28, delay: 18, tam: "6.5rem" },
+  { emoji: "🍫", left: "92%", dur: 32, delay: 9, tam: "4.5rem" },
+];
+
+function CenaPlaceholder() {
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-brand">
+      {/* Fundo que respira: dois brilhos que deslizam devagar. */}
+      <div className="absolute inset-0 animate-[maré_24s_ease-in-out_infinite] bg-[radial-gradient(60%_60%_at_30%_30%,rgba(255,120,110,.45),transparent_70%),radial-gradient(55%_55%_at_75%_70%,rgba(201,138,46,.35),transparent_70%)]" />
+
+      {FLUTUANTES.map((f, i) => (
+        <span
+          key={i}
+          className="absolute bottom-[-20%] select-none opacity-25"
+          style={{
+            left: f.left,
+            fontSize: f.tam,
+            animation: `subir ${f.dur}s linear ${f.delay}s infinite`,
+          }}
+        >
+          {f.emoji}
+        </span>
+      ))}
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-cream">
+        <span className="animate-[pulsar_6s_ease-in-out_infinite] text-[clamp(4rem,14vh,9rem)] leading-none">
+          🍓
+        </span>
+        <p className="font-display text-[clamp(2.5rem,9vh,5.5rem)] leading-none">
+          Sunbite
+        </p>
+        <p className="text-[clamp(.9rem,2.2vh,1.4rem)] tracking-[0.35em] text-cream/70">
+          ERDBEEREN MIT SCHOKOLADE
+        </p>
+      </div>
+    </div>
   );
 }
 

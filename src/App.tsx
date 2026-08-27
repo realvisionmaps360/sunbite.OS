@@ -220,7 +220,6 @@ export default function App() {
   // video ate alguem tocar no celular. Em estado, abrir o emissor dispara o
   // efeito de novo e o primeiro estado sai na hora.
   const [emissor, setEmissor] = useState<Emissor | null>(null);
-  const ultimoEstado = useRef<EstadoDisplay["kind"] | null>(null);
   useEffect(() => {
     const codigo = lerPar();
     if (!codigo) return;
@@ -262,18 +261,15 @@ export default function App() {
       // nova no primeiro instante em que teria como usa-la.
       estado = { kind: "repouso", vitrine: lerVitrine() };
     }
-    // ⚠️ O agradecimento e do iPad, e o celular nao pode atropela-lo.
+    // O celular manda o estado cru, sempre. Quem decide **quanto tempo** o
+    // agradecimento fica na tela e o iPad, porque e a tela que o cliente esta
+    // olhando (ver a guarda em `Display.tsx`).
     //
-    // Achado no teste, nao no projeto: a comemoracao do celular dura ~2s e
-    // some sozinha, e o `confirmation` voltando a nulo mandava "repouso" na
-    // hora — o "Danke!" piscava e sumia antes de o cliente ler. Quem manda no
-    // tempo do agradecimento e a tela que o cliente esta olhando
-    // (`OBRIGADO_MS` em protocol.ts), nao a que a Romana esta operando.
-    //
-    // Qualquer outra transicao passa normalmente: um copo novo interrompe o
-    // agradecimento, e deve mesmo — o proximo cliente ja chegou.
-    if (estado.kind === "repouso" && ultimoEstado.current === "obrigado") return;
-    ultimoEstado.current = estado.kind;
+    // ⚠️ Ja tentei resolver isto aqui, engolindo o "repouso" que vem logo
+    // depois do "obrigado" — e criei um defeito pior: como o emissor repete o
+    // ultimo estado a cada 8s, o ultimo estado ficava "obrigado" para sempre e
+    // o iPad nunca voltava a vitrine depois de uma venda. Guardar tempo no
+    // lado que nao tem o relogio nao funciona.
     emissor.enviar(estado);
   }, [emissor, screen, payment, recebido, confirmation, order.cups, order.total]);
 
