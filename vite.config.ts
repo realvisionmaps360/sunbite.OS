@@ -18,6 +18,40 @@ function shortSha(): string | undefined {
 const APP_VERSION =
   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? shortSha() ?? "dev";
 
+/**
+ * Troca o manifesto injetado em `display.html` pelo manifesto proprio da
+ * tela do cliente.
+ *
+ * ⚠️ Existe por causa de um defeito real: o VitePWA injeta o MESMO
+ * `<link rel="manifest">` em toda pagina HTML do build, entao `display.html`
+ * saia com o manifesto do PDV — `start_url: "/"`. O Felipe adicionou a tela
+ * do cliente a Tela de Inicio do iPad, e ao reabrir o icone o Safari nao leu
+ * o endereco da pagina: leu o `start_url` do manifesto, e caiu no PDV normal.
+ * "Fechei o app e ele abre na tela normal do app agora" era exatamente isso.
+ *
+ * A troca acontece DEPOIS do VitePWA injetar (enforce: "post", order: "post"),
+ * substituindo o `href` por um manifesto proprio
+ * (`public/display-manifest.webmanifest`) com `start_url: "/display.html"`
+ * e nome diferente ("Sunbite Kunde") — para o iPad sempre abrir a tela certa,
+ * e para o rotulo do icone deixar claro qual e qual.
+ */
+function manifestDoDisplay() {
+  return {
+    name: "sunbite-display-manifest",
+    enforce: "post" as const,
+    transformIndexHtml: {
+      order: "post" as const,
+      handler(html: string, ctx: { path: string }) {
+        if (ctx.path !== "/display.html") return html;
+        return html.replace(
+          '<link rel="manifest" href="/manifest.webmanifest">',
+          '<link rel="manifest" href="/display-manifest.webmanifest">',
+        );
+      },
+    },
+  };
+}
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
@@ -78,5 +112,6 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
       },
     }),
+    manifestDoDisplay(),
   ],
 });
