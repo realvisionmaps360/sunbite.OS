@@ -27,6 +27,22 @@ export const VIDEO_REPOUSO: string | null = null;
 export const CARTAZ_REPOUSO = "/display/repouso.svg";
 
 /**
+ * O logotipo oficial da Sunbite, recortado do arquivo da marca.
+ *
+ * Origem: `BUSINESS/SUNBITE.ch/LOGO offiziell Website.png` (1254x1254, fundo
+ * vermelho chapado). O recorte separou o logotipo do "STRAWBERRY CHOCOLATE
+ * CUPS" por pecas conectadas — corte reto nao servia, o rabo do "S" desce por
+ * cima da linha de baixo — e tirou a franja vermelha das bordas resolvendo a
+ * mistura de cada pixel meio-transparente. Testado sobre verde puro: sem halo.
+ *
+ * ⚠️ PNG com transparencia, em `public/`, para o service worker precachear
+ * (`globPatterns` no `vite.config.ts` inclui `png`). O iPad tem que abrir sem
+ * rede na feira, e um logotipo que depende de download e um retangulo vazio
+ * virado para o cliente.
+ */
+export const LOGO_SUNBITE = "/display/logo.png";
+
+/**
  * Dados da conta para o QR do TWINT com o valor dentro.
  *
  * ⚠️ **Ainda nao preenchido, e nao vou inventar.** Sem IBAN nao existe QR, e

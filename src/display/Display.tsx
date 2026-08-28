@@ -1,8 +1,9 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { money, toppingEmoji } from "../config";
 import { STRINGS } from "../i18n";
-import { CARTAZ_REPOUSO, TWINT_NUMERO, VIDEO_REPOUSO } from "./config";
+import { CARTAZ_REPOUSO, LOGO_SUNBITE, TWINT_NUMERO, VIDEO_REPOUSO } from "./config";
 import { qrDoValor, svgDoQR } from "./qr";
 import {
   OBRIGADO_MS,
@@ -79,7 +80,21 @@ export function Display() {
    * cresce um pouco — o pedido **encolhe para dar destaque** e o QR entra no
    * lugar do video, que foi exatamente o que o Felipe pediu em 27/08.
    */
-  const largura = repouso ? "100%" : twint ? "46%" : "34%";
+  const larguraPct = repouso ? 100 : twint ? 46 : 34;
+  const largura = `${larguraPct}%`;
+
+  /**
+   * A MESMA largura, em `vw`, para o CSS de dentro do painel poder medir por
+   * ela (`--painel`).
+   *
+   * ⚠️ Por que nao consulta de container: o iPad de 5a geracao do Felipe nao
+   * chega ao Safari 16, e `cqw` la invalida a declaracao inteira — o texto
+   * inteiro caiu para 16px e ele viu na tela. `vw` funciona em todo Safari, e
+   * como este painel e uma fracao exata da janela, a conta bate: 34% da janela
+   * sao 34vw. Se um dia o painel deixar de ser fracao da janela, esta linha
+   * mente e o certo passa a ser medir de verdade.
+   */
+  const painelVw = `${larguraPct}vw`;
 
   /**
    * A vitrine que o celular mandou, guardada no proprio iPad.
@@ -131,6 +146,7 @@ export function Display() {
           cada cliente, e um video que pisca e pior que nenhum video. */}
       <motion.div
         className="relative shrink-0 overflow-hidden"
+        style={{ "--painel": painelVw } as CSSProperties}
         animate={{ width: largura }}
         transition={{ type: "spring", stiffness: 120, damping: 22 }}
       >
@@ -266,28 +282,41 @@ function CenaPlaceholder() {
         </span>
       ))}
 
-      {/* ⚠️ `@container` + unidades `cq`: este bloco tem que encolher com o
-          PAINEL, nao com a pagina.
+      {/* ⚠️ Este bloco mede pela LARGURA DO PAINEL, via `--painel`.
 
-          Tudo aqui media em `vh` — altura da pagina. So que a largura deste
-          painel muda de 100% (repouso) para 34% (venda) e a altura nao muda
-          nada: o texto continuava do mesmo tamanho num painel tres vezes mais
-          estreito. O subtitulo, que so de espacamento entre letras passa de
-          380px, quebrava em duas linhas — e sem `text-center` e sem margem
-          lateral elas ficavam **coladas na borda esquerda**, cortando o "E" de
-          ERDBEEREN. Foi o "textos cortados e descentralizados" que o Felipe viu
-          quando comecou a venda, e da para reproduzir em 1024x768 (a tela do
-          iPad de 5a geracao). `cqw` mede a largura deste painel, entao o bloco
-          diminui junto com ele e nunca mais encosta na borda. */}
-      <div className="@container absolute inset-0">
-        <div className="flex h-full flex-col items-center justify-center gap-[clamp(.5rem,2cqw,1rem)] px-[8cqw] text-center text-cream">
-          <span className="animate-[pulsar_6s_ease-in-out_infinite] text-[clamp(3rem,22cqw,9rem)] leading-none">
-            🍓
-          </span>
-          <p className="font-display text-[clamp(1.8rem,17cqw,5.5rem)] leading-none">
-            Sunbite
-          </p>
-          <p className="text-[clamp(.65rem,3.4cqw,1.4rem)] tracking-[0.3em] text-cream/70">
+          Historia curta de dois defeitos seguidos, para ninguem repetir:
+
+          1. Media tudo em `vh` — altura da pagina. Mas a largura deste painel
+             vai de 100% (repouso) a 34% (venda) e a altura nao muda nada: o
+             subtitulo, que so de `tracking` passa de 380px, quebrava em duas
+             linhas coladas na borda esquerda, cortando o "E" de ERDBEEREN.
+
+          2. A correcao foi `@container` + `cqw`, e **quebrou no iPad do
+             Felipe**: consultas de container so existem a partir do Safari 16,
+             e o iPad de 5a geracao dele nao chega la. Unidade que o navegador
+             nao entende invalida a declaracao inteira, entao TODO o
+             `font-size` sumiu e o logotipo virou texto de 16px. Estava na foto,
+             minusculo, e nao apareceu no Chrome.
+
+          Hoje o `App` manda a largura do painel em `vw` (`--painel`, definido no
+          `motion.div` la em cima) e aqui e so `calc`. `vw` e `calc` funcionam em
+          qualquer Safari desde sempre, e o resultado e o mesmo: o bloco encolhe
+          junto com o painel. **Regra: nada nesta tela pode depender de um
+          recurso de CSS mais novo que o Safari 15.** */}
+      <div className="absolute inset-0">
+        <div className="flex h-full flex-col items-center justify-center gap-[calc(var(--painel,100vw)*0.02)] px-[calc(var(--painel,100vw)*0.07)] text-center text-cream">
+          {/* O logotipo oficial, recortado do arquivo da marca. Nao e mais
+              texto: a fonte do app nunca foi a do logo, e "Sunbite" escrito na
+              fonte errada, virado para o cliente, e a marca aparecendo errada.
+              PNG com transparencia, precacheado pelo service worker — abre sem
+              rede na feira, como todo o resto desta tela. */}
+          <img
+            src={LOGO_SUNBITE}
+            alt="Sunbite.ch"
+            className="animate-[pulsar_6s_ease-in-out_infinite] h-auto w-[clamp(7rem,calc(var(--painel,100vw)*0.62),34rem)] select-none drop-shadow-[0_10px_28px_rgba(0,0,0,.28)]"
+            draggable={false}
+          />
+          <p className="text-[clamp(.6rem,calc(var(--painel,100vw)*0.024),1.35rem)] tracking-[0.3em] text-cream/70">
             ERDBEEREN MIT SCHOKOLADE
           </p>
         </div>
