@@ -64,12 +64,19 @@ export function DisplayScreen({ onClose }: { onClose: () => void }) {
       setMsg(t("display.invalid"));
       return;
     }
+    // `gravarPar` avisa o `App.tsx` pelo `PAR_EVENTO`, e e ele que fecha o
+    // canal velho e abre o novo.
+    //
+    // ⚠️ Aqui havia um `location.reload()`. Era o jeito curto de fazer o
+    // emissor pegar o codigo novo — ele abre o canal uma vez so, na montagem
+    // do App — e o preco era o app inteiro reiniciar: quem digitava o codigo
+    // era cuspido de volta na Home, longe da tela onde acabara de parear e sem
+    // ver a bolinha ficar verde. Defeito apontado pelo Felipe em 28/08.
     gravarPar(codigo);
     setPar(codigo);
     setCampo("");
-    // O par so vale quando o emissor abre o canal novo, e ele abre uma vez, na
-    // montagem do App. Aqui o recarregar continua sendo o caminho honesto.
-    location.reload();
+    setMsg(t("display.paired"));
+    window.setTimeout(() => setMsg(""), 4000);
   }
 
   const ativos = paineis(v);

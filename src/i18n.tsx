@@ -130,6 +130,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "display.pair": "Parear",
     "display.unpair": "Desparear",
     "display.invalid": "O código tem 4 números.",
+    "display.paired": "Pareado. Olhe o iPad — o código sumiu de lá.",
     "display.live": "iPad {code} ligado agora.",
     "display.liveHint":
       "O iPad está ouvindo este celular. O código de 4 números sumiu da tela dele.",
@@ -626,6 +627,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "display.pair": "Verbinden",
     "display.unpair": "Trennen",
     "display.invalid": "Der Code hat vier Ziffern.",
+    "display.paired": "Verbunden. Schau aufs iPad — der Code ist weg.",
     "display.live": "iPad {code} ist jetzt verbunden.",
     "display.liveHint":
       "Das iPad hört dieses Handy. Der vierstellige Code ist von seinem Bildschirm verschwunden.",

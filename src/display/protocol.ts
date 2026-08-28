@@ -82,12 +82,28 @@ export function lerPar(): string | null {
   }
 }
 
+/**
+ * O par mudou nos Ajustes — o `App.tsx` reabre o canal AGORA.
+ *
+ * ⚠️ Mesma historia do `VITRINE_EVENTO`, e o mesmo conserto. O emissor abre o
+ * canal uma vez so, na montagem do `App`, entao parear com um codigo novo nao
+ * tinha como chegar ate ele: a tela de Ajustes resolvia com `location.reload()`.
+ * Funcionava, e cobrava caro — o app inteiro reiniciava e o Felipe era jogado
+ * de volta na Home no meio dos Ajustes, toda vez que digitava o codigo.
+ *
+ * Com o evento, quem grava avisa, o `App` fecha o canal velho e abre o novo, e
+ * a tela de Ajustes fica exatamente onde estava, com a bolinha ficando verde na
+ * frente de quem pareou.
+ */
+export const PAR_EVENTO = "sunbite:display-par";
+
 export function gravarPar(codigo: string): void {
   try {
     localStorage.setItem(PAIR_KEY, codigo);
   } catch {
     /* sem armazenamento, o par nao sobrevive ao recarregar — e so isso */
   }
+  avisarParMudou();
 }
 
 export function apagarPar(): void {
@@ -95,6 +111,15 @@ export function apagarPar(): void {
     localStorage.removeItem(PAIR_KEY);
   } catch {
     /* idem */
+  }
+  avisarParMudou();
+}
+
+function avisarParMudou(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(PAR_EVENTO));
+  } catch {
+    /* fora do navegador (teste): sem evento, e so isso */
   }
 }
 

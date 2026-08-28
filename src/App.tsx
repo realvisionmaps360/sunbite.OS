@@ -34,6 +34,7 @@ import {
 import { TOPPINGS } from "./config";
 import { deviceId, pendingSales, saveSale } from "./db";
 import {
+  PAR_EVENTO,
   VITRINE_EVENTO,
   lerPar,
   lerVitrine,
@@ -225,7 +226,19 @@ export default function App() {
   // nunca mais rodava, porque nada nas dependencias mudava. O iPad ficava no
   // video ate alguem tocar no celular. Em estado, abrir o emissor dispara o
   // efeito de novo e o primeiro estado sai na hora.
+  //
+  // `parVersao` e o que faz parear valer NA HORA. A tela de Ajustes grava o
+  // codigo e dispara `PAR_EVENTO`; este efeito roda de novo, fecha o canal
+  // velho e abre o do codigo novo. Antes o gatilho era um `location.reload()`
+  // dentro dos Ajustes — funcionava, e reiniciava o app na cara de quem estava
+  // usando.
   const [emissor, setEmissor] = useState<Emissor | null>(null);
+  const [parVersao, setParVersao] = useState(0);
+  useEffect(() => {
+    const aoMudar = () => setParVersao((n) => n + 1);
+    window.addEventListener(PAR_EVENTO, aoMudar);
+    return () => window.removeEventListener(PAR_EVENTO, aoMudar);
+  }, []);
   useEffect(() => {
     const codigo = lerPar();
     if (!codigo) return;
@@ -246,7 +259,7 @@ export default function App() {
       marcarPresenca(false);
       setEmissor(null);
     };
-  }, []);
+  }, [parVersao]);
 
   /**
    * A vitrine mudou nos Ajustes — remonta o payload AGORA.

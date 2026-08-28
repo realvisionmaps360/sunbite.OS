@@ -58,3 +58,21 @@ export interface ContaQR {
 }
 
 export const CONTA: ContaQR | null = null;
+
+/**
+ * Numero de TWINT que o cliente digita no app dele, enquanto nao ha IBAN.
+ *
+ * Decisao do Felipe em 28/08: **o numero pessoal da Romana**, por enquanto.
+ *
+ * ⚠️ E numero, nao QR — e a diferenca importa. **Nao existe QR que o cliente
+ * escaneie para pagar num numero de celular**: o TWINT por numero exige que ele
+ * abra o app, escolha "enviar" e digite. Desenhar um QR aqui seria um codigo
+ * bonito que nao leva a lugar nenhum, no meio de uma feira, com fila. Entao o
+ * display mostra o numero **grande, em blocos faceis de ler**, junto do valor.
+ *
+ * Quando o IBAN da Sunbite existir, preencher `CONTA` acima faz o QR de verdade
+ * voltar sozinho e este numero sai da tela — a tela ja escolhe entre os dois.
+ *
+ * Formato: escrever como se le em voz alta. O agrupamento e so visual.
+ */
+export const TWINT_NUMERO: string | null = "+41 76 583 52 22";

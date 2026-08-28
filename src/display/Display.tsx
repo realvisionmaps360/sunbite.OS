@@ -2,7 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { money, toppingEmoji } from "../config";
 import { STRINGS } from "../i18n";
-import { CARTAZ_REPOUSO, VIDEO_REPOUSO } from "./config";
+import { CARTAZ_REPOUSO, TWINT_NUMERO, VIDEO_REPOUSO } from "./config";
 import { qrDoValor, svgDoQR } from "./qr";
 import {
   OBRIGADO_MS,
@@ -113,7 +113,19 @@ export function Display() {
   }, [estado]);
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-brand-dark text-cream">
+    /* ⚠️ `fixed inset-0`, e nao `h-full`.
+
+       `h-full` e `height:100%`, que sobe pela corrente `#root` → `body` →
+       `html` ate a altura que o Safari do iPad informa — e no iPad essa altura
+       e a da area visivel COM as barras do Safari na tela. Quando as barras se
+       escondem sozinhas, a area visivel cresce e a pagina nao: sobra uma faixa
+       embaixo com o fundo vermelho do container aparecendo. Foi exatamente a
+       "listra vermelha horrivel" que o Felipe fotografou em 28/08, e ela nunca
+       apareceu no Chrome porque no Chrome as barras nao se escondem.
+
+       `fixed inset-0` prende a tela na janela inteira e nao pergunta a altura
+       para ninguem. Vale nos dois modos, com e sem a barra do Safari. */
+    <div className="fixed inset-0 flex overflow-hidden bg-brand-dark text-cream">
       {/* O video NUNCA desmonta — so muda de largura, e o que entra por cima
           dele e sempre uma camada. Remontar reiniciaria o arquivo do zero a
           cada cliente, e um video que pisca e pior que nenhum video. */}
@@ -165,9 +177,23 @@ export function Display() {
               }
             />
           )}
-          {estado.kind === "obrigado" && <Obrigado estado={estado} />}
         </div>
       )}
+
+      {/* ⚠️ O "Danke!" mora AQUI FORA, por cima dos dois paineis.
+
+          Ele era mais um filho da coluna da direita, entao dividia a tela com
+          o painel da marca — o cliente recebia um obrigado espremido em dois
+          tercos, com o logotipo do lado. Pedido do Felipe em 28/08: a tela
+          toda, e a transicao calma.
+
+          Como camada por cima, ele nao depende de largura nenhuma, e a saida
+          do pedido acontece por baixo sem piscar. */}
+      <AnimatePresence>
+        {estado.kind === "obrigado" && (
+          <Obrigado key="obrigado" estado={estado} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -240,16 +266,31 @@ function CenaPlaceholder() {
         </span>
       ))}
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-cream">
-        <span className="animate-[pulsar_6s_ease-in-out_infinite] text-[clamp(4rem,14vh,9rem)] leading-none">
-          🍓
-        </span>
-        <p className="font-display text-[clamp(2.5rem,9vh,5.5rem)] leading-none">
-          Sunbite
-        </p>
-        <p className="text-[clamp(.9rem,2.2vh,1.4rem)] tracking-[0.35em] text-cream/70">
-          ERDBEEREN MIT SCHOKOLADE
-        </p>
+      {/* ⚠️ `@container` + unidades `cq`: este bloco tem que encolher com o
+          PAINEL, nao com a pagina.
+
+          Tudo aqui media em `vh` — altura da pagina. So que a largura deste
+          painel muda de 100% (repouso) para 34% (venda) e a altura nao muda
+          nada: o texto continuava do mesmo tamanho num painel tres vezes mais
+          estreito. O subtitulo, que so de espacamento entre letras passa de
+          380px, quebrava em duas linhas — e sem `text-center` e sem margem
+          lateral elas ficavam **coladas na borda esquerda**, cortando o "E" de
+          ERDBEEREN. Foi o "textos cortados e descentralizados" que o Felipe viu
+          quando comecou a venda, e da para reproduzir em 1024x768 (a tela do
+          iPad de 5a geracao). `cqw` mede a largura deste painel, entao o bloco
+          diminui junto com ele e nunca mais encosta na borda. */}
+      <div className="@container absolute inset-0">
+        <div className="flex h-full flex-col items-center justify-center gap-[clamp(.5rem,2cqw,1rem)] px-[8cqw] text-center text-cream">
+          <span className="animate-[pulsar_6s_ease-in-out_infinite] text-[clamp(3rem,22cqw,9rem)] leading-none">
+            🍓
+          </span>
+          <p className="font-display text-[clamp(1.8rem,17cqw,5.5rem)] leading-none">
+            Sunbite
+          </p>
+          <p className="text-[clamp(.65rem,3.4cqw,1.4rem)] tracking-[0.3em] text-cream/70">
+            ERDBEEREN MIT SCHOKOLADE
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -721,9 +762,27 @@ function PainelTwint({ total }: { total: number }) {
               Scannen und bezahlen
             </motion.p>
           </>
+        ) : TWINT_NUMERO ? (
+          // Sem IBAN nao ha QR, mas ha numero: o cliente abre o TWINT, escolhe
+          // enviar e digita. Numero grande, porque ele vai ser lido de pe, a
+          // meio metro, e copiado a mao no aparelho de outra pessoa.
+          <motion.div
+            variants={item}
+            className="mt-1 rounded-[1.8rem] border border-cream/20 bg-cream/10 px-[clamp(1.2rem,4vw,2.6rem)] py-[clamp(.9rem,2.6vh,1.6rem)]"
+          >
+            <p className="text-[clamp(.75rem,2vh,1.1rem)] uppercase tracking-[0.24em] text-cream/60">
+              An diese Nummer senden
+            </p>
+            <p className="mt-2 font-display text-[clamp(1.8rem,6vh,3.4rem)] leading-none tabular-nums whitespace-nowrap text-cream">
+              {TWINT_NUMERO}
+            </p>
+            <p className="mt-3 text-[clamp(.85rem,2.2vh,1.2rem)] leading-snug text-cream/70">
+              TWINT öffnen · Senden · Nummer eingeben
+            </p>
+          </motion.div>
         ) : (
-          // Sem IBAN configurado nao ha QR — e o display DIZ isso, em vez de
-          // desenhar um codigo que nao leva a lugar nenhum. Ver `config.ts`.
+          // Nem IBAN nem numero: o display DIZ isso, em vez de desenhar um
+          // codigo que nao leva a lugar nenhum. Ver `config.ts`.
           <motion.div
             variants={item}
             className="mt-2 max-w-[22rem] rounded-[1.6rem] border border-cream/20 bg-cream/10 px-6 py-5"
@@ -1019,6 +1078,18 @@ function ListaPedido({
   );
 }
 
+/** A subida calma das linhas do "Danke", igual para as tres. */
+function subirCalmo(reduzir: boolean | null) {
+  return {
+    fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 24 },
+    dentro: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduzir ? 0 : 0.8, ease: "easeOut" as const },
+    },
+  };
+}
+
 function Obrigado({
   estado,
 }: {
@@ -1029,50 +1100,61 @@ function Obrigado({
     <motion.div
       initial="fora"
       animate="dentro"
+      exit="saindo"
       variants={{
         fora: { opacity: 0 },
-        dentro: { opacity: 1, transition: { staggerChildren: reduzir ? 0 : 0.1 } },
+        /* Calmo de proposito: 0.9s para o fundo aparecer, e so depois os
+           filhos, um a um. O "Danke" e o unico momento da tela em que ninguem
+           esta esperando nada — e o lugar certo para ir devagar. */
+        dentro: {
+          opacity: 1,
+          transition: {
+            duration: reduzir ? 0 : 0.9,
+            ease: "easeOut",
+            delayChildren: reduzir ? 0 : 0.35,
+            staggerChildren: reduzir ? 0 : 0.16,
+          },
+        },
+        saindo: { opacity: 0, transition: { duration: reduzir ? 0 : 0.7 } },
       }}
-      className="relative flex h-full flex-col items-center justify-center gap-4 p-8 text-center"
+      className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-[clamp(.6rem,2.4vh,1.4rem)] overflow-hidden bg-brand-dark p-8 text-center"
     >
+      {/* Sem este brilho o obrigado em tela cheia vira um retangulo escuro —
+          o que em 1024x768 e muito retangulo escuro. */}
+      <div className="absolute inset-0 bg-[radial-gradient(65%_55%_at_50%_28%,rgba(201,138,46,.30),transparent_72%),radial-gradient(60%_50%_at_50%_100%,rgba(132,20,18,.55),transparent_70%)]" />
       <Boiando />
       <motion.p
         variants={{
-          fora: reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.4 },
+          fora: reduzir ? { opacity: 0 } : { opacity: 0, scale: 0.82 },
           dentro: {
             opacity: 1,
             scale: 1,
-            transition: { type: "spring", stiffness: 260, damping: 12 },
+            /* Mola macia, nao pulo. A anterior (rigidez 260, amortecimento 12)
+               dava um quique de brinquedo — o Felipe pediu calma. */
+            transition: { type: "spring", stiffness: 90, damping: 20 },
           },
         }}
-        className="relative text-[6rem] leading-none"
+        className="relative text-[clamp(4rem,11vh,7rem)] leading-none"
       >
         🍓
       </motion.p>
+      {/* Subida curta e longa no tempo: 0.8s de `easeOut` le como "assentar",
+          e nao como "aparecer". Os tres usam a mesma, escalonados pelo pai. */}
       <motion.p
-        variants={{
-          fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 20 },
-          dentro: { opacity: 1, y: 0 },
-        }}
-        className="relative font-display text-[clamp(3rem,9vw,6rem)] leading-none"
+        variants={subirCalmo(reduzir)}
+        className="relative font-display text-[clamp(3.5rem,13vh,7.5rem)] leading-none"
       >
         Danke!
       </motion.p>
       <motion.p
-        variants={{
-          fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 20 },
-          dentro: { opacity: 1, y: 0 },
-        }}
-        className="relative text-2xl text-cream/70"
+        variants={subirCalmo(reduzir)}
+        className="relative font-display text-[clamp(1.6rem,5vh,2.8rem)] tabular-nums text-cream/75"
       >
         {money(estado.total)}
       </motion.p>
       <motion.p
-        variants={{
-          fora: reduzir ? { opacity: 0 } : { opacity: 0, y: 20 },
-          dentro: { opacity: 1, y: 0 },
-        }}
-        className="relative text-xl text-cream/50"
+        variants={subirCalmo(reduzir)}
+        className="relative text-[clamp(1rem,3vh,1.6rem)] text-cream/55"
       >
         Bis zum nächsten Mal.
       </motion.p>

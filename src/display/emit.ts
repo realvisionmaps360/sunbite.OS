@@ -103,9 +103,25 @@ export function abrirEmissor(
     }
   })();
 
-  const batida = window.setInterval(() => {
+  const bater = () => {
     if (vivo && pronto && ultimo && enviarDeVerdade) enviarDeVerdade(ultimo);
-  }, BATIDA_MS);
+  };
+
+  const batida = window.setInterval(bater, BATIDA_MS);
+
+  /**
+   * A tela do celular acendeu — bate na hora, sem esperar os 8s.
+   *
+   * ⚠️ O `setInterval` acima **para** enquanto a tela do Android esta apagada:
+   * o navegador congela os temporizadores da aba escondida. Ate 8 segundos de
+   * atraso no primeiro reencontro nao quebram nada, mas sao 8 segundos com o
+   * iPad mostrando a vitrine enquanto a Romana ja voltou ao pedido. Uma batida
+   * no instante em que a aba reaparece fecha essa janela.
+   */
+  const aoVoltar = () => {
+    if (document.visibilityState === "visible") bater();
+  };
+  document.addEventListener("visibilitychange", aoVoltar);
 
   return {
     enviar(estado) {
@@ -118,6 +134,7 @@ export function abrirEmissor(
       vivo = false;
       opcoes.aoMudarPresenca?.(false);
       window.clearInterval(batida);
+      document.removeEventListener("visibilitychange", aoVoltar);
       fecharCanal?.();
       fecharCanal = null;
       enviarDeVerdade = null;

@@ -31,10 +31,27 @@ export function ouvir(
    * o `sync` diz quem esta na sala agora.
    */
   let temCelular = false;
-  let mudo = false;
   let ultima: Conexao | null = null;
+  /**
+   * ⚠️ **O silencio NAO decide a conexao.** So a presenca decide.
+   *
+   * Isto era `temCelular && !calado`, e foi um defeito real, fotografado pelo
+   * Felipe em 28/08: o iPad mostrava o codigo e "keine Verbindung" com o
+   * celular ligado e pareado do lado.
+   *
+   * O motivo: o silencio conta 90s sem batida, e a batida do emissor e um
+   * `setInterval` do celular. Celular na mesa com a tela apagada tem os
+   * temporizadores **congelados** pelo Android — o app nao morreu, so parou de
+   * contar. Os 90s passavam, o iPad se declarava sozinho, e o codigo voltava
+   * por cima da vitrine na frente do cliente.
+   *
+   * A presenca nao depende de temporizador nenhum do app: ela vive na propria
+   * conexao. Celular que sumiu de verdade sai da sala e o codigo volta — que e
+   * a regra do Felipe, intacta. O silencio continua servindo para devolver a
+   * vitrine (logo abaixo), que e coisa de tela, nao de conexao.
+   */
   const recalcular = () => {
-    const agora: Conexao = temCelular && !mudo ? "ligado" : "caiu";
+    const agora: Conexao = temCelular ? "ligado" : "caiu";
     if (agora === ultima) return;
     ultima = agora;
     aoConectar(agora);
@@ -47,20 +64,17 @@ export function ouvir(
    * fluxo. Celular sem bateria no meio de um pedido nao pode deixar o iPad
    * congelado com o pedido de outra pessoa na cara do proximo cliente.
    *
-   * E o silencio tambem **rebaixa a conexao**: antes ele devolvia a vitrine e
-   * deixava `conexao` em "ligado", entao o iPad ficava mudo e sem codigo na
-   * tela ao mesmo tempo — o pior dos dois mundos.
+   * ⚠️ E o silencio faz **so** isso: devolve a vitrine. Ele ja rebaixou a
+   * conexao junto, e era errado — ver o comentario de `recalcular` acima.
+   * Silencio quer dizer "o celular parou de falar", que num Android com a tela
+   * apagada e o normal. Quem responde "ha um celular ai?" e a presenca.
    */
   let relogio: number | undefined;
   const armar = () => {
     window.clearTimeout(relogio);
-    mudo = false;
-    recalcular();
     relogio = window.setTimeout(() => {
       if (!vivo) return;
-      mudo = true;
       aoReceber({ kind: "repouso" });
-      recalcular();
     }, SILENCIO_MS);
   };
 
