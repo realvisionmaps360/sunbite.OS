@@ -154,19 +154,13 @@ export async function correctSale(
   });
 }
 
-/**
- * Apaga as vendas de hoje. Serve para limpar teste antes de abrir a temporada.
- * So mexe no dia corrente — historico de dias anteriores fica fora de alcance.
+/*
+ * `deleteToday()` morava aqui e foi removida em 28/08, junto com o bloco
+ * "Limpeza" dos Ajustes, a pedido do Felipe. Era o unico apagar de verdade
+ * do app inteiro — todo o resto e cancelamento, que nunca some dos totais.
+ * Limpar teste antes da temporada continua possivel, mas pelo SQL Editor do
+ * Supabase, que e onde essa decisao deve doer um pouco antes de acontecer.
  */
-export async function deleteToday(): Promise<number> {
-  const d = await db();
-  const rows: Sale[] = await d.getAll(STORE);
-  const alvo = rows.filter((s) => s.local_date === today());
-  const tx = d.transaction(STORE, "readwrite");
-  for (const s of alvo) await tx.store.delete(s.id);
-  await tx.done;
-  return alvo.length;
-}
 
 /**
  * Espelho local das tabelas que precisam funcionar sem internet — hoje, a

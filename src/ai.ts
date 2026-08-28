@@ -99,6 +99,20 @@ async function resolveByName(
   const { data: found } = await supabase.from(table).select("id").eq("name", name).maybeSingle();
   if (found?.id) return found.id as string;
 
+  // Rede de seguranca contra item duplicado. Desde que a IA responde nos tres
+  // idiomas, o nome pode voltar com outra caixa ("morango" em vez de
+  // "Morango") e o .eq() acima, que e sensivel a maiuscula, criaria um item
+  // novo ao lado do que ja existe. Aqui a comparacao e por caixa baixa e sem
+  // espaco sobrando. NAO tenta traduzir: "Erdbeeren" continua sendo item
+  // novo, e evitar isso e trabalho do prompt, que manda propor sempre com o
+  // nome do catalogo em portugues.
+  const alvo = name.trim().toLowerCase();
+  const { data: todos } = await supabase.from(table).select("id, name");
+  const igual = ((todos ?? []) as { id: string; name: string }[]).find(
+    (r) => r.name.trim().toLowerCase() === alvo,
+  );
+  if (igual?.id) return igual.id as string;
+
   const { data: created, error } = await supabase
     .from(table)
     .insert({ name, ...createWith })

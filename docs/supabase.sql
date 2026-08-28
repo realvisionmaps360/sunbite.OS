@@ -1410,3 +1410,107 @@ grant select on public.v_finance_daily to authenticated;
 
 alter table public.ai_messages
   add column if not exists reply_text text;
+
+
+-- ============================================================================
+-- ops 13 — Checklist: os dois itens que faltavam, e a ilustracao por item
+-- Ver ~/.claude/plans/attach-compressed-fountain.md, blocos 1E e Parte 2
+--
+-- RODAR ANTES DO DEPLOY correspondente. Coluna nova sem SQL faz o insert
+-- responder PGRST204 — e a licao da Fatia 3 e que isso PARA a sincronizacao
+-- de vendas inteira. Nada se perde (fica no celular), mas o servidor deixa
+-- de receber.
+--
+-- Este arquivo e idempotente: rodar duas vezes nao faz mal.
+-- ============================================================================
+
+
+-- ── 1. Os dois itens apontados em 28/08 ─────────────────────────────────────
+--
+-- "4 barras de ferro" na preparacao, e o teto do painel solar na OPERACAO.
+--
+-- ⚠️ Achado ao escrever isto: a fase `operacao` nunca teve um unico item.
+-- O CHECK da tabela sempre aceitou o valor e o tipo Phase do app tambem,
+-- mas o seed nao tinha nenhuma linha e a tela escondia a lista de proposito
+-- (`tab !== "operacao"` em OperationScreen.tsx). Ou seja: inserir este item
+-- so aparece na tela depois do redesenho da Parte 2, que destrava a fase.
+--
+-- O teto e `critical = true`: sem ele o painel solar nao carrega, e a bateria
+-- da geladeira e o que segura o morango no calor. E a mesma familia de
+-- "Freio" e "Bateria" na saida.
+
+insert into public.checklist_templates (phase, label_pt, label_de, critical, sort_order) values
+  ('preparacao', '4 barras de ferro', '4 Eisenstangen', false, 180),
+  ('operacao',   'Abrir o teto para o painel solar', 'Dach für das Solarpanel öffnen', true, 10)
+on conflict (phase, label_pt) do nothing;
+
+
+-- ── 2. A ilustracao de cada item ────────────────────────────────────────────
+--
+-- Guarda o APELIDO do desenho (`barra-ferro`, `luvas`, `gelo`), nunca uma URL
+-- e nunca um arquivo. O desenho e um SVG dentro do app
+-- (`src/components/ilustracoes.tsx`), no mesmo padrao dos paineis de QR do
+-- iPad: desenhado, nunca baixado.
+--
+-- Por que assim, e nao uma foto no Storage: o app e PWA offline. Foto no
+-- Storage precisaria de bucket novo, policy nova e estrategia de cache, e
+-- 40 PNGs pesam no precache. SVG abre sem rede, escala sem borrar e usa as
+-- cores da marca. Quando o Felipe mandar as fotos reais, trocar e uma
+-- entrada por item no registro do app — este SQL nao muda.
+--
+-- Apelido desconhecido nao quebra nada: o app cai no emoji.
+
+alter table public.checklist_templates
+  add column if not exists icon text;
+
+update public.checklist_templates set icon = v.icon
+from (values
+  -- preparacao
+  ('preparacao', 'Caixa vermelha',                              'caixa-vermelha'),
+  ('preparacao', 'Dinheiro contado dentro da caixa',            'dinheiro'),
+  ('preparacao', 'Duas colheres de chocolate',                  'colher-chocolate'),
+  ('preparacao', 'Dois recipientes para chocolate',             'recipiente-chocolate'),
+  ('preparacao', 'Duas tampas dos recipientes',                 'tampa'),
+  ('preparacao', 'Tripé para celular',                          'tripe'),
+  ('preparacao', 'Carregador do celular',                       'carregador'),
+  ('preparacao', 'Celular carregado',                           'celular'),
+  ('preparacao', 'Luvas pretas',                                'luvas'),
+  ('preparacao', 'Sacos de lixo',                               'saco-lixo'),
+  ('preparacao', 'Caixa de som',                                'caixa-som'),
+  ('preparacao', 'Caixa de som carregada',                      'caixa-som-bateria'),
+  ('preparacao', 'Bateria da geladeira carregada',              'bateria-geladeira'),
+  ('preparacao', 'Bateria do motor carregada',                  'bateria-motor'),
+  ('preparacao', 'Pacotes de gelo',                             'gelo'),
+  ('preparacao', 'Gelo no congelador na véspera',               'congelador'),
+  ('preparacao', 'Material/QR Code TWINT',                      'twint'),
+  ('preparacao', '4 barras de ferro',                           'barra-ferro'),
+  -- saida
+  ('saida',      'Local confirmado',                            'local'),
+  ('saida',      'Horário confirmado',                          'horario'),
+  ('saida',      'Autorização verificada',                      'autorizacao'),
+  ('saida',      'Morangos',                                    'morango'),
+  ('saida',      'Chocolate',                                   'chocolate'),
+  ('saida',      'Toppings',                                    'topping'),
+  ('saida',      'Chantilly',                                   'chantilly'),
+  ('saida',      'Copos',                                       'copo'),
+  ('saida',      'Freio',                                       'freio'),
+  ('saida',      'Bateria',                                     'bateria'),
+  -- operacao
+  ('operacao',   'Abrir o teto para o painel solar',            'teto-solar'),
+  -- encerramento
+  ('encerramento', 'Parar novos pedidos',                       'parar-pedidos'),
+  ('encerramento', 'Contabilizar ingredientes restantes',       'contar-ingredientes'),
+  ('encerramento', 'Identificar produto descartável',           'descartar'),
+  ('encerramento', 'Guardar produto aproveitável de forma segura', 'guardar'),
+  ('encerramento', 'Fechar caixa',                              'fechar-caixa'),
+  ('encerramento', 'Conferir TWINT',                            'conferir-twint'),
+  ('encerramento', 'Desligar equipamentos',                     'desligar'),
+  ('encerramento', 'Limpar superfícies',                        'limpar'),
+  ('encerramento', 'Desmontar materiais',                       'desmontar'),
+  ('encerramento', 'Carregar equipamentos',                     'carregar-bike'),
+  ('encerramento', 'Verificar se nada ficou no local',          'nada-esquecido')
+) as v(phase, label_pt, icon)
+where public.checklist_templates.phase = v.phase
+  and public.checklist_templates.label_pt = v.label_pt;
+
+

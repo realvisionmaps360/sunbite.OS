@@ -28,3 +28,7 @@ dist-ssr
 
 # Cache do CLI do Supabase — nao e codigo, muda sozinho.
 supabase/.temp/
+
+# Screenshots de verificacao — prova de sessao, nao codigo.
+.shots/
+.playwright-mcp/

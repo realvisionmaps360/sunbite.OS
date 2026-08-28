@@ -27,7 +27,10 @@ export function AdminHeader({ title, onClose }: { title: string; onClose: () => 
         <span className="text-2xl leading-none">‹</span>
         {t("nav.home")}
       </button>
-      <h1 className="flex-1 truncate text-center font-display text-2xl">{title}</h1>
+      {/* text-xl, nao text-2xl: em 360px sobram ~150px entre o "‹ Inicio" e o
+          PT·DE, e "Tela do cliente" saia como "Tela do clie…". Titulo de tela
+          cortado e defeito, nao detalhe — foi visto em screenshot. */}
+      <h1 className="min-w-0 flex-1 truncate text-center font-display text-xl">{title}</h1>
       <LangToggle />
     </header>
   );

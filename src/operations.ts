@@ -35,6 +35,13 @@ export interface ChecklistTemplate {
   critical: boolean;
   sort_order: number;
   active: boolean;
+  /**
+   * Apelido do desenho do item (`barra-ferro`, `luvas`, `gelo`), resolvido
+   * por `src/components/ilustracoes.tsx`. Nunca uma URL: o app abre offline,
+   * e desenho que depende de rede vira buraco branco na barraca. Apelido
+   * desconhecido nao quebra nada — cai no emoji.
+   */
+  icon: string | null;
 }
 
 export interface ChecklistStateRow {

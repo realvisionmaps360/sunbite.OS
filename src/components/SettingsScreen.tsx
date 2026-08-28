@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { money } from "../config";
-import { allSales, deleteToday, deviceId, today } from "../db";
+import { deviceId } from "../db";
 import { DisplayScreen } from "./DisplayScreen";
 import { useLang } from "../i18n";
 import { getCupPrice, getToppingPrice } from "../prices";
@@ -31,15 +31,7 @@ export function SettingsScreen({
   const { t } = useLang();
   const cfg = loadConfig();
   const [msg, setMsg] = useState("");
-  const [todayCount, setTodayCount] = useState(0);
-  const [asking, setAsking] = useState(false);
   const [display, setDisplay] = useState(false);
-
-  useEffect(() => {
-    void allSales().then((rows) =>
-      setTodayCount(rows.filter((s) => s.local_date === today()).length),
-    );
-  }, [msg]);
 
   async function handleSync() {
     setMsg(t("settings.syncing"));
@@ -54,13 +46,6 @@ export function SettingsScreen({
     } else if (r.reason === "no-config") setMsg(t("settings.noConfig"));
     else if (r.reason === "offline") setMsg(t("settings.offline"));
     else setMsg(t("settings.error", { msg: r.message ?? "" }));
-  }
-
-  async function handleReset() {
-    const n = await deleteToday();
-    setAsking(false);
-    setMsg(n === 0 ? t("settings.resetNone") : t("settings.resetDone", { n }));
-    onDataChanged();
   }
 
   return (
@@ -111,43 +96,18 @@ export function SettingsScreen({
 
         <TileButton emoji="🛠️" label={t("settings.system")} variant="outline" onClick={onOpenSystem} />
 
-        {/* Fica por último de propósito: ninguém encosta aqui sem querer. */}
-        <Card className="border-2 border-red-600/30">
-          <h2 className="font-display text-xl text-red-700">
-            {t("settings.danger")}
-          </h2>
-          <p className="text-sm text-ink-muted">{t("settings.resetHint")}</p>
-
-          {asking ? (
-            <div className="space-y-3">
-              <p className="font-semibold text-red-700">
-                {t("settings.resetAsk", { n: todayCount })}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleReset}
-                  className="flex-1 rounded-2xl bg-red-700 py-3 font-semibold text-white"
-                >
-                  {t("settings.resetYes")}
-                </button>
-                <button
-                  onClick={() => setAsking(false)}
-                  className="flex-1 rounded-2xl border border-black/20 py-3 font-semibold"
-                >
-                  {t("settings.resetNo")}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => (todayCount === 0 ? setMsg(t("settings.resetNone")) : setAsking(true))}
-              className="w-full rounded-2xl border border-red-600/50 py-3 font-semibold text-red-700"
-            >
-              {t("settings.reset")}
-              {todayCount > 0 && ` (${todayCount})`}
-            </button>
-          )}
-        </Card>
+        {/* Caminho de volta para a tela do cliente, no proprio tablet.
+            `display.html` e uma PAGINA do build, nao uma rota do App — entao
+            e um link de verdade, nao um setScreen. Existe porque o Felipe
+            atualizou o iPad, caiu na Home do PDV e ficou sem como voltar: a
+            unica instrucao era digitar a URL na mao no Safari. */}
+        <a
+          href="/display.html"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-brand py-4 font-semibold text-brand transition active:scale-[0.98]"
+        >
+          <span className="text-2xl leading-none">🖥️</span>
+          {t("settings.openDisplay")}
+        </a>
 
         {msg && (
           <p className="rounded-2xl bg-brand/10 p-3 text-center text-brand">{msg}</p>

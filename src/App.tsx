@@ -33,7 +33,13 @@ import {
 } from "./components/adminScreens";
 import { TOPPINGS } from "./config";
 import { deviceId, pendingSales, saveSale } from "./db";
-import { lerPar, lerVitrine, type EstadoDisplay } from "./display/protocol";
+import {
+  VITRINE_EVENTO,
+  lerPar,
+  lerVitrine,
+  marcarPresenca,
+  type EstadoDisplay,
+} from "./display/protocol";
 import type { Emissor } from "./display/emit";
 import { LangToggle, useLang } from "./i18n";
 import { logEvent } from "./log";
@@ -227,14 +233,35 @@ export default function App() {
     let aberto: Emissor | null = null;
     void import("./display/emit").then((m) => {
       if (!vivo) return;
-      aberto = m.abrirEmissor(codigo);
+      // A presenca sobe para o modulo puro `display/protocol`, e e de la que a
+      // tela de Ajustes le a bolinha. Assim a `DisplayScreen` continua sem
+      // importar `emit.ts` — o isolamento do pacote da venda fica intacto e
+      // nao existe um segundo canal aberto so para desenhar um ponto verde.
+      aberto = m.abrirEmissor(codigo, { aoMudarPresenca: marcarPresenca });
       setEmissor(aberto);
     });
     return () => {
       vivo = false;
       aberto?.fechar();
+      marcarPresenca(false);
       setEmissor(null);
     };
+  }, []);
+
+  /**
+   * A vitrine mudou nos Ajustes — remonta o payload AGORA.
+   *
+   * ⚠️ A vitrine pega carona no estado de repouso, e este efeito nao depende do
+   * `localStorage`: nada aqui acordava quando o Felipe salvava. O unico gatilho
+   * era um `location.reload()` na tela de Ajustes, e a batida de 8s do emissor
+   * so reenviava o payload velho ja montado. Com o evento, o "o iPad muda em
+   * segundos" vira verdade — sem recarregar nada.
+   */
+  const [vitrineVersao, setVitrineVersao] = useState(0);
+  useEffect(() => {
+    const aoMudar = () => setVitrineVersao((n) => n + 1);
+    window.addEventListener(VITRINE_EVENTO, aoMudar);
+    return () => window.removeEventListener(VITRINE_EVENTO, aoMudar);
   }, []);
 
   // O que o iPad deve estar mostrando agora. Derivado do estado que ja existe:
@@ -289,7 +316,16 @@ export default function App() {
     // o iPad nunca voltava a vitrine depois de uma venda. Guardar tempo no
     // lado que nao tem o relogio nao funciona.
     emissor.enviar(estado);
-  }, [emissor, screen, payment, recebido, confirmation, order.cups, order.total]);
+  }, [
+    emissor,
+    screen,
+    payment,
+    recebido,
+    confirmation,
+    order.cups,
+    order.total,
+    vitrineVersao,
+  ]);
 
   /**
    * Botão/gesto físico de voltar do celular (Android): sem isto, como o app

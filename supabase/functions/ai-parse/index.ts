@@ -258,12 +258,28 @@ async function runReadTool(name: string, input: any, caller: any): Promise<unkno
   }
 }
 
-function systemPrompt(lang: "pt" | "de") {
+// Idioma da interface (botao PT/DE, e "en" se um dia existir). NAO e mais uma
+// ordem: entra no prompt so como DICA de desempate. Quem manda e a frase do
+// usuario — perguntar em alemao com a interface em portugues respondia em
+// portugues, e isso era o defeito.
+type UILang = "pt" | "de" | "en";
+
+const UI_LANG_LABEL: Record<UILang, string> = {
+  pt: "portugues",
+  de: "alemao (Deutsch)",
+  en: "ingles (English)",
+};
+
+function systemPrompt(lang: UILang) {
   return `Voce e a Sunbite IA, a assistente do dono de uma barraca de morango com chocolate na Suica (Sunbite). Seu tom e SECO, REAL E DIRETO: sem elogio generico, sem "Claro!", sem "Fico feliz em ajudar", sem enfeite. Responda a pergunta e pare.
 
-Responda SEMPRE no idioma: ${lang === "de" ? "alemao (Deutsch)" : "portugues"}.
+IDIOMA DA RESPOSTA:
+- Responda SEMPRE no idioma da MENSAGEM DO USUARIO. Os idiomas possiveis sao tres: portugues, alemao (Deutsch) e ingles (English). Voce detecta o idioma pela propria frase — nunca pelo idioma da interface.
+- Frase misturada: responda no idioma DOMINANTE da frase, ou seja, o idioma da intencao e da maior parte das palavras, ignorando nomes de produto. Exemplo: "morango ausgaben" — "ausgaben" (despesas) e a intencao e "morango" e so o nome do item no catalogo; idioma dominante e o ALEMAO, entao responda em alemao. Mesma logica para "wie viele Erdbeeren", "how much Schokolade". Use bom senso.
+- O idioma da interface e apenas uma DICA de desempate, e vale SO quando a frase for curta ou ambigua demais para decidir (ex: "ok", "morango?", um numero solto). Idioma da interface agora: ${UI_LANG_LABEL[lang]}. Essa dica NUNCA sobrepoe um idioma claro na frase.
+- A pessoa pode trocar de idioma a qualquer momento no meio da conversa. Cada resposta segue o idioma da ULTIMA mensagem dela, nao o das anteriores.
 
-FORMATO: texto simples, lido no celular. NUNCA use markdown — nada de **negrito**, ##titulo, ou listas com - e *. Se precisar separar assuntos, use paragrafos curtos.
+FORMATO: texto simples, lido no celular. NUNCA use markdown — nada de **negrito**, ##titulo, ou listas com - e *. Se precisar separar assuntos, use paragrafos curtos. Esta proibicao vale igual nos tres idiomas — em alemao e em ingles tambem, texto simples.
 
 Voce tem tres coisas que pode fazer, e pode combinar mais de uma na mesma pergunta:
 
@@ -275,7 +291,7 @@ Se a mensagem nao tiver nada acionavel nem pergunta, responda algo curto reconhe
 
 REGRA MAIS IMPORTANTE (nunca duplicar — o dado ja pode existir):
 - O PDV ja registra e desconta cada venda sozinho, automaticamente, pela ficha do copo (quanto morango, chocolate, copo, colher e topping cada copo vendido gasta). Isso acontece SEM voce.
-- Se a frase disser algo como "vendemos 32 copos", "baixa de 56 copos", "as vendas de hoje" — isso e so uma DESCRICAO do que o PDV ja fez sozinho. NUNCA proponha stock_movements para copo vendido. Se quiser confirmar o numero, use a ferramenta vendas_hoje e responda em texto, sem propor nada de estoque.
+- Se a frase disser algo como "vendemos 32 copos", "baixa de 56 copos", "as vendas de hoje" — ou o mesmo em alemao ("wir haben 32 Becher verkauft", "der Verkauf von heute") ou em ingles ("we sold 32 cups", "today's sales") — isso e so uma DESCRICAO do que o PDV ja fez sozinho. A regra vale identica nos tres idiomas. NUNCA proponha stock_movements para copo vendido. Se quiser confirmar o numero, use a ferramenta vendas_hoje e responda em texto, sem propor nada de estoque.
 - estoque so deve ser proposto para o que o PDV NAO sabe sozinho: sobrou, estragou, foi usado em teste/degustacao, ou uma contagem fisica ("Contei").
 
 Regras gerais para propor:
@@ -287,7 +303,10 @@ Regras gerais para propor:
 CATALOGOS (na mensagem, quando relevante):
 - A mensagem pode trazer as listas de itens de estoque, fornecedores, equipamentos e locais ja cadastrados.
 - Ao se referir a um deles, use o NOME EXATO como aparece na lista.
-- Se a frase citar algo que NAO esta na lista, use o nome como foi dito — o app oferece criar o item novo.
+- O catalogo esta em PORTUGUES, mas a pergunta pode vir em alemao ou ingles. TRADUZA o termo do usuario e CASE com o nome do catalogo ANTES de chamar qualquer ferramenta de leitura. Exemplos: "Erdbeeren" / "strawberry" / "strawberries" -> chame a ferramenta com item: "Morango". "Schokolade" / "chocolate" -> o nome de chocolate que estiver na lista. "Becher" / "cup" -> o nome de copo que estiver na lista.
+- As ferramentas de leitura NAO traduzem nada: elas so procuram pedaco de texto no nome em portugues. Chamar com "Erdbeeren" devolve vazio mesmo existindo "Morango" no catalogo. Se vier vazio, primeiro desconfie da traducao e tente de novo com o nome do catalogo, antes de dizer que nao ha o item.
+- Ao PROPOR registros, o nome do item (stock_item_name, supplier_name, place_name, name de equipamento) e SEMPRE o nome exato do catalogo em portugues, mesmo que a pessoa tenha falado em alemao ou ingles. Propor "Erdbeeren" criaria um item duplicado ao lado de "Morango" no banco — isso e defeito. O texto da resposta e o "resumo" seguem as regras deles; o NOME do item nao muda de idioma nunca.
+- Se a frase citar algo que realmente NAO existe na lista em nenhum idioma (confira as traducoes antes de concluir isso), use o nome como foi dito — o app oferece criar o item novo.
 
 Area ESTOQUE (stock_movements):
 - Use SO para o que nao passou pela venda: sobrou, foi usado, estragou, ou contagem fisica.
@@ -353,7 +372,12 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const texto = String(body?.texto || "").trim();
     const inputMode = body?.modo === "voice" ? "voice" : "text";
-    const lang = body?.lang === "de" ? "de" : "pt";
+    // Dica de desempate, nao ordem: o idioma da resposta sai da frase do
+    // usuario (ver "IDIOMA DA RESPOSTA" no systemPrompt). O cliente hoje so
+    // manda "pt" ou "de"; "en" ja e aceito para o dia em que a interface
+    // tiver ingles, sem precisar mexer aqui de novo.
+    const lang: UILang =
+      body?.lang === "de" ? "de" : body?.lang === "en" ? "en" : "pt";
     if (!texto || texto.length < 3) return json({ error: "Texto muito curto" }, 400);
 
     // Catalogos: a IA escolhe pelo nome, o app resolve para UUID ao aprovar.

@@ -120,8 +120,20 @@ export const EVENTO = "estado";
  * que leva ao perfil errado e pior que nenhum QR.
  */
 export interface Vitrine {
-  /** Painel do video: liga/desliga e quanto tempo fica. */
+  /**
+   * O painel de fundo (cena/video) e **de primeira classe**: entra sempre no
+   * rodizio, com duracao propria. Este liga/desliga escolhe **o que ele
+   * mostra** — `true` = o video de verdade (quando o arquivo existir em
+   * `VIDEO_REPOUSO`), `false` = a cena em CSS.
+   *
+   * ⚠️ Antes ele decidia se o painel **existia**. Com o video desligado a
+   * lista virava [instagram, google], e como os paineis de QR sao
+   * `absolute inset-0` com fundo opaco por cima da cena sempre montada, a cena
+   * dos morangos **nunca aparecia sozinha**. Nao era o video que faltava: era
+   * o turno dele no rodizio.
+   */
   video: boolean;
+  /** Quanto tempo a cena (ou o video) fica na tela, por volta do rodizio. */
   videoSeg: number;
   instagram: string;
   instagramSeg: number;
@@ -130,8 +142,9 @@ export interface Vitrine {
 }
 
 export const VITRINE_PADRAO: Vitrine = {
-  video: true,
-  videoSeg: 30,
+  // `false` porque `VIDEO_REPOUSO` ainda e null: o padrao honesto e a cena.
+  video: false,
+  videoSeg: 20,
   // Os dois enderecos vieram do Felipe em 27/08. Ficam aqui como PARTIDA, e
   // nao travados: a tela de Ajustes sobrescreve, e e por ela que se troca.
   // Mesma ideia do preco em `config.ts` depois da DEC-2026-005.
@@ -155,33 +168,100 @@ export function lerVitrine(): Vitrine {
   }
 }
 
+/**
+ * Nome do evento que avisa o app de que a vitrine mudou.
+ *
+ * Existe porque a vitrine pega **carona no payload de repouso**, e o efeito
+ * que monta esse payload em `App.tsx` nao depende do `localStorage` — nada o
+ * acordava. O unico gatilho era `location.reload()` na tela de Ajustes, e a
+ * batida de 8s do emissor so reenviava o payload velho ja montado. Um evento
+ * e o caminho curto: quem grava avisa, o App remonta na hora, o emissor manda.
+ */
+export const VITRINE_EVENTO = "sunbite:display-vitrine";
+
 export function gravarVitrine(v: Vitrine): void {
   try {
     localStorage.setItem(VITRINE_KEY, JSON.stringify(v));
   } catch {
     /* sem armazenamento: vale so nesta sessao */
   }
+  try {
+    window.dispatchEvent(new CustomEvent(VITRINE_EVENTO));
+  } catch {
+    /* fora do navegador (teste): sem evento, e so isso */
+  }
+}
+
+/* ===========================================================================
+   PRESENCA — ha mesmo um iPad do outro lado?
+   ===========================================================================
+   Mora aqui, no modulo **puro**, de proposito. Quem sabe da presenca de
+   verdade e `emit.ts`, que importa o Supabase e por isso so pode ser carregado
+   por `import()` dinamico. A tela de Ajustes (`DisplayScreen.tsx`) precisa
+   mostrar a bolinha, mas nao pode importar `emit.ts` sem arrastar o client do
+   Supabase para dentro do pacote da venda.
+
+   Entao o caminho e este: `App.tsx` — que ja abre o canal — empurra o valor
+   para ca por `marcarPresenca`, e a tela le por `presencaDoDisplay()` e ouve o
+   evento. Nenhum import novo, nenhum canal a mais, isolamento intacto.
+   =========================================================================== */
+
+export const PRESENCA_EVENTO = "sunbite:display-presenca";
+
+let presenca = false;
+
+export function marcarPresenca(temIpad: boolean): void {
+  if (presenca === temIpad) return;
+  presenca = temIpad;
+  try {
+    window.dispatchEvent(
+      new CustomEvent(PRESENCA_EVENTO, { detail: temIpad }),
+    );
+  } catch {
+    /* idem */
+  }
+}
+
+/** O que se sabe agora. `false` tambem quando nao ha par nenhum guardado. */
+export function presencaDoDisplay(): boolean {
+  return presenca;
 }
 
 /**
  * Os paineis que de fato entram no rodizio, ja na ordem e com a duracao.
  *
- * Se a lista sair vazia — video desligado e nenhum endereco colado — o iPad
- * volta ao video mesmo assim. Tela preta num balcao le como aparelho quebrado.
+ * A cena **sempre** entra, e e por isso que a lista nunca sai vazia: tela preta
+ * num balcao le como aparelho quebrado, e a cena e o descanso natural entre um
+ * QR e o outro.
  */
 export type PainelVitrine =
-  | { tipo: "video"; segundos: number }
+  | { tipo: "cena"; segundos: number; video: boolean }
   | { tipo: "instagram"; segundos: number; url: string }
   | { tipo: "google"; segundos: number; url: string };
 
 export function paineis(v: Vitrine): PainelVitrine[] {
-  const lista: PainelVitrine[] = [];
-  if (v.video) lista.push({ tipo: "video", segundos: Math.max(5, v.videoSeg) });
+  const lista: PainelVitrine[] = [
+    { tipo: "cena", segundos: Math.max(5, v.videoSeg), video: v.video },
+  ];
   if (v.instagram.trim())
     lista.push({ tipo: "instagram", segundos: Math.max(5, v.instagramSeg), url: v.instagram.trim() });
   if (v.google.trim())
     lista.push({ tipo: "google", segundos: Math.max(5, v.googleSeg), url: v.google.trim() });
-  return lista.length ? lista : [{ tipo: "video", segundos: 30 }];
+  return lista;
+}
+
+/**
+ * A chave de ESTRUTURA do rodizio: tipos e enderecos, sem os segundos.
+ *
+ * ⚠️ E a separacao que corrige um defeito real: a chave era o objeto inteiro
+ * (`JSON.stringify(vitrine)`), entao mexer num slider de segundos mudava a
+ * chave e o rodizio voltava ao painel 1. Mudar **quais** paineis existem
+ * justifica reiniciar; mudar quanto tempo cada um dura, nao.
+ */
+export function estruturaDaVitrine(lista: PainelVitrine[]): string {
+  return lista
+    .map((p) => (p.tipo === "cena" ? `cena:${p.video}` : `${p.tipo}:${p.url}`))
+    .join("|");
 }
 
 /**

@@ -2,13 +2,13 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { money, toppingEmoji } from "../config";
 import { STRINGS } from "../i18n";
-import { loadConfig } from "../sync";
 import { CARTAZ_REPOUSO, VIDEO_REPOUSO } from "./config";
 import { qrDoValor, svgDoQR } from "./qr";
 import {
   OBRIGADO_MS,
   VITRINE_PADRAO,
   codigoDoDisplay,
+  estruturaDaVitrine,
   paineis,
   trocarCodigo,
   type EstadoDisplay,
@@ -36,10 +36,9 @@ export function Display() {
   const [conexao, setConexao] = useState<Conexao>("ligando");
 
   useEffect(() => {
-    if (!loadConfig()) {
-      setConexao("caiu");
-      return;
-    }
+    // Sem `if (!loadConfig())`: `loadConfig()` nunca devolve null (ver
+    // `src/sync.ts`), entao o ramo era codigo morto. Sem configuracao o
+    // `getSupabase()` de `link.ts` estoura e o `catch` de la ja diz "caiu".
     return ouvir(
       codigo,
       (novo) =>
@@ -123,19 +122,22 @@ export function Display() {
         animate={{ width: largura }}
         transition={{ type: "spring", stiffness: 120, damping: 22 }}
       >
-        <Video />
+        <Video usarVideo={vitrine.video} />
 
         {/* O rodizio da vitrine so existe no repouso. Durante a venda o video
             volta sozinho: um QR do Instagram por cima do pedido seria roubar a
             atencao de quem esta pagando. */}
         {repouso && <Rodizio vitrine={vitrine} />}
-        {repouso && (
-          <Pareamento
-            codigo={codigo}
-            conexao={conexao}
-            onTrocar={() => setCodigo(trocarCodigo())}
-          />
-        )}
+
+        {/* ⚠️ SEM `repouso &&`. Regra dura do Felipe: o codigo aparece SEMPRE
+            que nao ha conexao de verdade, e NUNCA quando ha. Amarrado ao
+            repouso, um iPad parado com o pedido de alguem que ja sumiu ficava
+            justamente sem o unico numero que resolveria a situacao. */}
+        <Pareamento
+          codigo={codigo}
+          conexao={conexao}
+          onTrocar={() => setCodigo(trocarCodigo())}
+        />
 
         {/* O QR do TWINT entra AQUI, no lugar do video, sem tirar o pedido da
             tela. E a camada que o Felipe pediu. */}
@@ -170,7 +172,7 @@ export function Display() {
   );
 }
 
-function Video() {
+function Video({ usarVideo }: { usarVideo: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
 
   // `muted` + `playsInline` no atributo nao bastam no Safari do iPad: se a
@@ -178,12 +180,12 @@ function Video() {
   // silencio e o iPad fica preto. Chamar `play()` de novo quando a aba volta
   // e o que faz o video estar rodando quando alguem chega no balcao.
   useEffect(() => {
-    if (!VIDEO_REPOUSO) return;
+    if (!VIDEO_REPOUSO || !usarVideo) return;
     const tocar = () => void ref.current?.play().catch(() => {});
     tocar();
     document.addEventListener("visibilitychange", tocar);
     return () => document.removeEventListener("visibilitychange", tocar);
-  }, []);
+  }, [usarVideo]);
 
   // Sem arquivo de video ainda: uma cena que se mexe, feita so de CSS.
   //
@@ -192,7 +194,7 @@ function Video() {
   // imovel por 30 segundos e pior que nada. Zero bytes de download, roda no
   // Safari do iPad sem codec nenhum. Trocar pelo video de verdade continua
   // sendo **uma linha** em `config.ts`.
-  if (!VIDEO_REPOUSO) return <CenaPlaceholder />;
+  if (!VIDEO_REPOUSO || !usarVideo) return <CenaPlaceholder />;
 
   return (
     <video
@@ -321,7 +323,7 @@ function Boiando() {
    =========================================================================== */
 
 /**
- * O rodizio: video → Instagram → Google → video…
+ * O rodizio: cena → Instagram → Google → cena…
  *
  * Fica POR CIMA do video, e o video nunca desmonta por baixo. O painel de
  * video e simplesmente "nao mostrar nada aqui" — o que aparece e o video que
@@ -329,31 +331,47 @@ function Boiando() {
  * painel: e ele que faz o QR entrar e sair por cima.
  */
 function Rodizio({ vitrine }: { vitrine: Vitrine }) {
-  // A chave e o conteudo, nao o objeto: e o que garante que o rodizio so
-  // recomeca quando o Felipe muda de verdade a vitrine nos Ajustes.
-  const chave = JSON.stringify(vitrine);
-  const lista = useMemo(() => paineis(vitrine), [chave]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lista = paineis(vitrine);
+
+  /**
+   * Duas chaves, e nao uma.
+   *
+   * ⚠️ A chave era `JSON.stringify(vitrine)` — o objeto inteiro, com os
+   * segundos dentro. Mexer num slider de segundos nos Ajustes mudava a chave e
+   * o rodizio voltava ao painel 1. A ESTRUTURA (quais paineis, com que
+   * endereco) justifica reiniciar; a DURACAO nao. Por isso a duracao viaja por
+   * `ref`, lida pelo relogio na hora de agendar, sem tocar no indice.
+   */
+  const estrutura = estruturaDaVitrine(lista);
+  const listaRef = useRef(lista);
+  listaRef.current = lista;
+
   const [i, setI] = useState(0);
 
   useEffect(() => {
     setI(0);
-  }, [chave]);
+  }, [estrutura]);
 
   useEffect(() => {
-    if (lista.length < 2) return; // um painel so nao reveza
-    const atual = lista[i % lista.length];
+    const atuais = listaRef.current;
+    if (atuais.length < 2) return; // um painel so nao reveza
+    const atual = atuais[i % atuais.length];
     const id = window.setTimeout(
-      () => setI((n) => (n + 1) % lista.length),
+      () => setI((n) => (n + 1) % listaRef.current.length),
       atual.segundos * 1000,
     );
     return () => window.clearTimeout(id);
-  }, [i, lista]);
+  }, [i, estrutura]);
 
   const painel = lista[i % lista.length];
 
   return (
     <AnimatePresence mode="wait">
-      {painel && painel.tipo !== "video" && (
+      {/* A cena e painel de verdade agora, com turno proprio no rodizio: na vez
+          dela o que aparece e o que ja esta rodando por baixo, entao aqui e so
+          **nao cobrir**. Antes ela nunca tinha vez, e os QR (que sao
+          `absolute inset-0` com fundo opaco) a escondiam para sempre. */}
+      {painel && painel.tipo !== "cena" && (
         <PainelQR key={`${painel.tipo}-${i}`} painel={painel} />
       )}
     </AnimatePresence>

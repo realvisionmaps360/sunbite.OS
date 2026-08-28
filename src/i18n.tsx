@@ -117,17 +117,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.error": "Erro: {msg}",
     "settings.device": "Aparelho {id}",
 
-    "settings.danger": "Limpeza",
-    "settings.resetHint":
-      "Apaga as vendas de hoje. Serve para tirar os testes antes de abrir a temporada. Dias anteriores não são tocados.",
-    "settings.reset": "Apagar vendas de hoje",
-    "settings.resetAsk": "Apagar as {n} vendas de hoje? Não dá para desfazer.",
-    "settings.resetAsk_one": "Apagar a venda de hoje? Não dá para desfazer.",
-    "settings.resetYes": "Sim, apagar",
-    "settings.resetNo": "Não",
-    "settings.resetDone": "{n} vendas apagadas.",
-    "settings.resetDone_one": "1 venda apagada.",
-    "settings.resetNone": "Nenhuma venda hoje.",
+    // Nao e "abrir a tela do cliente" — o botao acima ja se chama parecido e
+    // configura o iPad. Este transforma ESTE aparelho na tela do cliente, e e
+    // o caminho de volta quando o tablet recarrega e cai no PDV.
+    "settings.openDisplay": "Usar este aparelho como tela do cliente",
     "settings.system": "Sistema",
 
     "display.title": "Tela do cliente",
@@ -135,25 +128,38 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
       "Abra sunbite-pdv.vercel.app/display.html no iPad. Ele mostra um código de 4 números — escreva esse código aqui.",
     "display.code": "Código do iPad",
     "display.pair": "Parear",
-    "display.paired": "Pareado com o iPad {code}.",
     "display.unpair": "Desparear",
     "display.invalid": "O código tem 4 números.",
-    "display.needsConfig":
-      "Precisa do Supabase configurado: a tela do cliente é a única parte do app que exige internet.",
+    "display.live": "iPad {code} ligado agora.",
+    "display.liveHint":
+      "O iPad está ouvindo este celular. O código de 4 números sumiu da tela dele.",
+    "display.offline": "iPad {code} não responde.",
+    "display.offlineHint":
+      "O par está guardado, mas nenhum iPad está no ar. Abra a tela do cliente no iPad — o código volta a aparecer nela.",
     "display.pairTitle": "O iPad",
     "display.showcase": "O que aparece parado",
     "display.showcaseHint":
-      "Quando ninguém está comprando, o iPad reveza entre o que estiver ligado aqui. Assim que alguém pede, ele mostra o pedido sozinho.",
-    "display.panel.video": "Vídeo",
+      "Quando ninguém está comprando, o iPad reveza os painéis abaixo, um de cada vez, e volta ao primeiro no fim.",
+    "display.panel.cena": "Cena da Sunbite",
+    "display.panel.cenaHint":
+      "Morangos subindo devagar com o nome da Sunbite. Está sempre no rodízio.",
     "display.panel.instagram": "QR do Instagram",
+    "display.panel.instagramHint":
+      "Tela roxa com o QR do perfil. Sem endereço, o painel sai do rodízio.",
     "display.panel.google": "QR do Google",
+    "display.panel.googleHint":
+      "Tela clara com o QR da página de avaliação. Sem endereço, o painel sai do rodízio.",
+    "display.usesVideo": "Vídeo",
+    "display.usesScene": "Cena",
     "display.on": "Ligado",
     "display.off": "Desligado",
     "display.needsUrl": "Falta o endereço",
     "display.seconds": "Tempo na tela",
     "display.cycle": "Vai revezar: {lista}. A volta inteira leva {total}s.",
+    "display.orderHint":
+      "Quando um pedido começa, o iPad interrompe o rodízio e mostra os copos e o total ao cliente. No TWINT ele abre o QR. Terminada a venda, agradece e volta sozinho para o rodízio.",
     "display.save": "Salvar e mandar para o iPad",
-    "display.saved": "Salvo. O iPad muda em segundos.",
+    "display.saved": "Salvo. O iPad já mudou.",
     "display.footnote":
       "Cole o endereço exato do perfil. QR que leva ao lugar errado é pior que nenhum QR.",
 
@@ -610,19 +616,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.error": "Fehler: {msg}",
     "settings.device": "Gerät {id}",
 
-    "settings.danger": "Bereinigung",
-    "settings.resetHint":
-      "Löscht die heutigen Verkäufe. Dient dazu, Tests vor dem Saisonstart zu entfernen. Frühere Tage bleiben unberührt.",
-    "settings.reset": "Heutige Verkäufe löschen",
-    "settings.resetAsk":
-      "Die {n} heutigen Verkäufe löschen? Das lässt sich nicht rückgängig machen.",
-    "settings.resetAsk_one":
-      "Den heutigen Verkauf löschen? Das lässt sich nicht rückgängig machen.",
-    "settings.resetYes": "Ja, löschen",
-    "settings.resetNo": "Nein",
-    "settings.resetDone": "{n} Verkäufe gelöscht.",
-    "settings.resetDone_one": "1 Verkauf gelöscht.",
-    "settings.resetNone": "Heute keine Verkäufe.",
+    "settings.openDisplay": "Dieses Gerät als Kundenbildschirm nutzen",
     "settings.system": "System",
 
     "display.title": "Kundenanzeige",
@@ -630,25 +624,38 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
       "Öffne sunbite-pdv.vercel.app/display.html auf dem iPad. Dort erscheint ein vierstelliger Code — gib ihn hier ein.",
     "display.code": "Code vom iPad",
     "display.pair": "Verbinden",
-    "display.paired": "Mit iPad {code} verbunden.",
     "display.unpair": "Trennen",
     "display.invalid": "Der Code hat vier Ziffern.",
-    "display.needsConfig":
-      "Supabase muss konfiguriert sein: die Kundenanzeige ist der einzige Teil der App, der Internet braucht.",
+    "display.live": "iPad {code} ist jetzt verbunden.",
+    "display.liveHint":
+      "Das iPad hört dieses Handy. Der vierstellige Code ist von seinem Bildschirm verschwunden.",
+    "display.offline": "iPad {code} antwortet nicht.",
+    "display.offlineHint":
+      "Die Verbindung ist gespeichert, aber kein iPad ist online. Öffne die Kundenanzeige auf dem iPad — dort erscheint der Code wieder.",
     "display.pairTitle": "Das iPad",
     "display.showcase": "Was im Leerlauf läuft",
     "display.showcaseHint":
-      "Wenn niemand kauft, wechselt das iPad zwischen dem, was hier eingeschaltet ist. Sobald jemand bestellt, zeigt es von selbst die Bestellung.",
-    "display.panel.video": "Video",
+      "Wenn niemand kauft, wechselt das iPad die Tafeln unten der Reihe nach durch und beginnt danach wieder von vorn.",
+    "display.panel.cena": "Sunbite-Szene",
+    "display.panel.cenaHint":
+      "Erdbeeren, die langsam aufsteigen, mit dem Namen Sunbite. Immer im Wechsel dabei.",
     "display.panel.instagram": "Instagram-QR",
+    "display.panel.instagramHint":
+      "Violette Tafel mit dem QR des Profils. Ohne Adresse fällt die Tafel aus dem Wechsel.",
     "display.panel.google": "Google-QR",
+    "display.panel.googleHint":
+      "Helle Tafel mit dem QR der Bewertungsseite. Ohne Adresse fällt die Tafel aus dem Wechsel.",
+    "display.usesVideo": "Video",
+    "display.usesScene": "Szene",
     "display.on": "Ein",
     "display.off": "Aus",
     "display.needsUrl": "Adresse fehlt",
     "display.seconds": "Dauer",
     "display.cycle": "Wechselt: {lista}. Eine Runde dauert {total}s.",
+    "display.orderHint":
+      "Sobald eine Bestellung beginnt, unterbricht das iPad den Wechsel und zeigt dem Gast die Becher und den Betrag. Bei TWINT erscheint der QR. Nach dem Verkauf bedankt es sich und kehrt von selbst zum Wechsel zurück.",
     "display.save": "Speichern und ans iPad senden",
-    "display.saved": "Gespeichert. Das iPad wechselt in Sekunden.",
+    "display.saved": "Gespeichert. Das iPad hat schon gewechselt.",
     "display.footnote":
       "Genaue Profiladresse einfügen. Ein QR, der falsch führt, ist schlimmer als gar keiner.",
 

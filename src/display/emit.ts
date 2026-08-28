@@ -33,7 +33,21 @@ export interface Emissor {
  */
 const BATIDA_MS = 8000;
 
-export function abrirEmissor(codigo: string): Emissor {
+export interface OpcoesEmissor {
+  /**
+   * Chamado sempre que a resposta a "ha um iPad ouvindo?" muda.
+   *
+   * ⚠️ Nao da para responder isso pelo `SUBSCRIBED`: um canal de broadcast do
+   * Supabase sobe **sozinho**, sem ninguem do outro lado. Quem responde e o
+   * Presence — cada lado se anuncia com `track()` e os dois recebem o `sync`.
+   */
+  aoMudarPresenca?: (temIpad: boolean) => void;
+}
+
+export function abrirEmissor(
+  codigo: string,
+  opcoes: OpcoesEmissor = {},
+): Emissor {
   let vivo = true;
   let pronto = false;
   /** Ultimo estado: serve para a espera do canal E para a batida. */
@@ -46,10 +60,27 @@ export function abrirEmissor(codigo: string): Emissor {
     try {
       const supabase = await getSupabase();
       const ch = supabase.channel(canal(codigo), {
-        config: { broadcast: { self: false } },
+        config: {
+          broadcast: { self: false },
+          // Chave unica por conexao: dois celulares no mesmo canal nao se
+          // sobrescrevem, e o `papel` de dentro e que diz quem e quem.
+          presence: { key: `celular:${Math.random().toString(36).slice(2)}` },
+        },
+      });
+      ch.on("presence", { event: "sync" }, () => {
+        if (!vivo) return;
+        const estado = ch.presenceState<{ papel?: string }>();
+        const temIpad = Object.values(estado).some((lista) =>
+          lista.some((p) => p.papel === "ipad"),
+        );
+        opcoes.aoMudarPresenca?.(temIpad);
       });
       ch.subscribe((status) => {
-        if (status !== "SUBSCRIBED" || !vivo) return;
+        if (status !== "SUBSCRIBED" || !vivo) {
+          if (vivo) opcoes.aoMudarPresenca?.(false);
+          return;
+        }
+        void ch.track({ papel: "celular" });
         pronto = true;
         // O que aconteceu enquanto o canal subia nao se perde: o iPad recebe
         // o estado de agora assim que ha por onde.
@@ -66,7 +97,9 @@ export function abrirEmissor(codigo: string): Emissor {
     } catch {
       // Sem configuracao do Supabase, sem sessao, sem rede: o display
       // simplesmente nao acende. **Nenhuma tela do celular espera resposta do
-      // iPad** — e por isso que este catch e vazio de proposito.
+      // iPad** — e por isso que este catch nao mostra erro em tela nenhuma.
+      // Mas a bolinha tem que ficar vermelha: sem canal nao ha par.
+      opcoes.aoMudarPresenca?.(false);
     }
   })();
 
@@ -83,6 +116,7 @@ export function abrirEmissor(codigo: string): Emissor {
     },
     fechar() {
       vivo = false;
+      opcoes.aoMudarPresenca?.(false);
       window.clearInterval(batida);
       fecharCanal?.();
       fecharCanal = null;
