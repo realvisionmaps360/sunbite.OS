@@ -191,10 +191,21 @@ export interface Place {
   id: string;
   name: string;
   city: string | null;
+  /** Rua e número. Separado de `city` porque o site mostra local + cidade. */
+  address: string | null;
   fee: number | null;
   contact: string | null;
   rating: string | null;
   notes: string | null;
+  /** `double precision` no banco — é o que `navigator.geolocation` entrega. */
+  lat: number | null;
+  lng: number | null;
+  /**
+   * O link do Maps, guardado inteiro mesmo quando não carrega coordenada
+   * nenhuma (o link curto `maps.app.goo.gl` não carrega): serve para abrir o
+   * Maps com um toque, que é o uso do dia a dia.
+   */
+  maps_url: string | null;
   created_at: string;
   updated_at: string;
 }

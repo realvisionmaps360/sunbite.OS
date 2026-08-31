@@ -53,13 +53,35 @@ const ROWS = {
       closed_at: null,
       created_at: "2026-08-28T08:00:00Z",
     },
+    // A vez anterior no mesmo local (pl1), ja fechada: e o que a folha do
+    // evento resume em "da ultima vez aqui".
+    {
+      id: "op0",
+      local_date: "2026-08-22",
+      place_id: "pl1",
+      event_id: null,
+      status: "closed",
+      cash_initial: 200,
+      cash_final: 1459,
+      opened_by: "u-teste",
+      opened_at: "2026-08-22T09:00:00Z",
+      closed_by: "u-teste",
+      closed_at: "2026-08-22T21:30:00Z",
+      created_at: "2026-08-22T08:00:00Z",
+    },
   ],
+  // Parte 4: as colunas completas, incluindo as quatro novas. `pl3` e o pior
+  // caso de largura de proposito — nome composto alemao de 30 letras num card
+  // de ~134px em 360px, com CHF 1234.50 na pilula.
   places: [
-    { id: "pl1", name: "Aarau Färberplatz", city: "Aarau" },
-    { id: "pl2", name: "Zofingen Altstadt", city: "Zofingen" },
+    { id: "pl1", name: "Aarau Färberplatz", city: "Aarau", address: "Färberplatz 1", fee: 120, contact: "markt@aarau.ch", rating: "Boa, volta", notes: "Chegar 7h", lat: 47.391484, lng: 8.045321, maps_url: "https://www.google.com/maps/search/?api=1&query=47.391484,8.045321", created_at: "", updated_at: "" },
+    { id: "pl2", name: "Zofingen Altstadt", city: "Zofingen", address: null, fee: null, contact: null, rating: null, notes: null, lat: null, lng: null, maps_url: null, created_at: "", updated_at: "" },
+    { id: "pl3", name: "Weihnachtsmarkt Bahnhofstrasse", city: "Zürich", address: "Bahnhofstrasse 12", fee: 1234.5, contact: null, rating: "Caro, mas vende", notes: null, lat: 47.372, lng: 8.539, maps_url: null, created_at: "", updated_at: "" },
   ],
   events: [
-    { id: "ev1", starts_at: "2026-08-28T10:00:00Z", label_de: "Wochenmarkt Aarau", label_en: "Aarau Market" },
+    { id: "ev1", place_id: "pl1", starts_at: "2026-08-28T10:00:00Z", label_de: "Wochenmarkt Aarau", label_en: "Aarau Market", is_public: true, event_type: "market", notes: null, created_at: "", updated_at: "" },
+    { id: "ev2", place_id: "pl3", starts_at: "2026-12-06T16:00:00Z", label_de: "Weihnachtsmarkt", label_en: "Christmas Market", is_public: false, event_type: "festival", notes: "Confirmar tomada", created_at: "", updated_at: "" },
+    { id: "ev3", place_id: null, starts_at: "2026-09-14T09:00:00Z", label_de: null, label_en: null, is_public: false, event_type: "popup", notes: null, created_at: "", updated_at: "" },
   ],
   // Os 40 itens reais do banco (ops13-checklist-rodar-no-supabase.sql), com o
   // apelido do desenho. O alemao aqui e o pior caso de largura de proposito —
@@ -115,10 +137,20 @@ const ROWS = {
     sort_order: i * 10,
     active: true,
   })),
+  // As tres primeiras sao da operacao ABERTA (op1) e alimentam a conta do
+  // caixa no Encerramento. ⚠️ Elas ganharam `operation_id` na Parte 4 porque
+  // o `eq()` do mock passou a filtrar de verdade: sem a coluna, a tela de
+  // Operacao deixaria de achar as proprias vendas — e nao e isso que acontece
+  // em producao. As duas ultimas sao da vez ANTERIOR no mesmo local (op0,
+  // fechada), que e o que a folha do evento resume em "da ultima vez aqui";
+  // a cancelada entra de proposito: ela nao pode contar.
   sales: [
-    { total: 1234.5, payment: "cash", cancelled: false },
-    { total: 1234.5, payment: "twint", cancelled: false },
-    { total: 99, payment: "cash", cancelled: true },
+    { id: "sv1", operation_id: "op1", cup_count: 3, total: 1234.5, payment: "cash", cancelled: false },
+    { id: "sv2", operation_id: "op1", cup_count: 2, total: 1234.5, payment: "twint", cancelled: false },
+    { id: "sv3", operation_id: "op1", cup_count: 9, total: 99, payment: "cash", cancelled: true },
+    { id: "sv4", operation_id: "op0", cup_count: 3, total: 24.5, payment: "cash", cancelled: false },
+    { id: "sv5", operation_id: "op0", cup_count: 2, total: 1234.5, payment: "twint", cancelled: false },
+    { id: "sv6", operation_id: "op0", cup_count: 9, total: 99, payment: "cash", cancelled: true },
   ],
   // Fatia 5. Os numeros saem do teste em Postgres de verdade (PGlite), mais
   // dois casos que a tela precisa saber mostrar: item fora da ficha, e item
@@ -215,8 +247,22 @@ const result = (table) => {
   // motivo que nao existe em producao.
   let inserted = null;
   let sorts = [];
+  // eq()/neq() eram no-op. A tela de Locais (Parte 4) pergunta "a ultima
+  // operacao FECHADA neste local" com .eq("place_id").eq("status","closed") e
+  // depois "as vendas daquela operacao" com .eq("operation_id") — com filtro
+  // de mentira o preview devolvia a operacao errada e somava vendas de outro
+  // dia, e o numero na tela pareceria certo. Mock que filtra diferente do
+  // Postgres e mock que mente.
+  let patch = null;
+  const aplicar = () => {
+    if (patch) for (const r of rows) Object.assign(r, patch);
+    patch = null;
+    return rows;
+  };
   const q = {
-    select: () => q, eq: () => q, neq: () => q,
+    select: () => q,
+    eq: (col, val) => { rows = rows.filter((r) => r?.[col] === val); return q; },
+    neq: (col, val) => { rows = rows.filter((r) => r?.[col] !== val); return q; },
     insert: (row) => { inserted = { id: "novo-" + table, ...row }; return q; },
     // Multi-chave de verdade. Era uma ordenacao so, e a ultima chamada
     // desfazia a anterior — .order("phase").order("sort_order") do checklist
@@ -247,11 +293,15 @@ const result = (table) => {
     limit: (n) => Promise.resolve({ data: rows.slice(0, n), error: null }),
     single: () => Promise.resolve({ data: inserted ?? rows[0] ?? null, error: null }),
     maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
-    update: () => q,
+    // update() era no-op: o valor voltava ao antigo assim que a tela
+    // recarregava os dados, e isso NAO acontece em producao. Como update()
+    // vem antes dos .eq(), o patch fica guardado e so e aplicado no fim, nas
+    // linhas que sobraram do filtro — que sao as mesmas objetos de ROWS.
+    update: (p) => { patch = p; return q; },
     ilike: () => q,
-    then: (f, r) => Promise.resolve({ data: rows, error: null }).then(f, r),
-    catch: (f) => Promise.resolve({ data: rows, error: null }).catch(f),
-    finally: (f) => Promise.resolve({ data: rows, error: null }).finally(f),
+    then: (f, r) => Promise.resolve({ data: aplicar(), error: null }).then(f, r),
+    catch: (f) => Promise.resolve({ data: aplicar(), error: null }).catch(f),
+    finally: (f) => Promise.resolve({ data: aplicar(), error: null }).finally(f),
   };
   return q;
 };
@@ -308,6 +358,7 @@ import OperationScreen from "./components/OperationScreen.tsx";
 // verdade em :5173, onde Vendas ainda le as vendas reais do IndexedDB.
 import EquipmentScreen from "./components/EquipmentScreen.tsx";
 import SuppliersScreen from "./components/SuppliersScreen.tsx";
+import PlacesScreen from "./components/PlacesScreen.tsx";
 import { LangProvider } from "./i18n.tsx";
 
 // Abre direto na tela do ?screen=, no idioma do ?lang= — o unico jeito de
@@ -315,7 +366,7 @@ import { LangProvider } from "./i18n.tsx";
 const params = new URLSearchParams(location.search);
 const lang = params.get("lang");
 if (lang === "de" || lang === "pt") localStorage.setItem("sunbite.lang", lang);
-const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen, equipment: EquipmentScreen, suppliers: SuppliersScreen };
+const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen, equipment: EquipmentScreen, suppliers: SuppliersScreen, places: PlacesScreen };
 const Tela = SCREENS[params.get("screen")] ?? FinanceScreen;
 
 // ?click=N abre sozinho o N-esimo "?" da tela, para fotografar a caixinha

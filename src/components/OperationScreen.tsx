@@ -16,34 +16,12 @@ import {
   type Pendency,
   type Phase,
 } from "../operations";
+import { googleCalendarUrl } from "../places";
 import { subscribeRealtime } from "../realtime";
 import { getSupabase } from "../supabase";
 import type { Place, SunbiteEvent } from "../types";
 import LoginScreen from "./LoginScreen";
 import { OccurrenceSheet } from "./OccurrenceSheet";
-
-/** yyyymmddThhmmssZ, como o Google Calendar exige na URL de "adicionar evento". */
-function toGCalStamp(iso: string): string {
-  return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-}
-
-/**
- * URL padrao do Google Calendar (acao=TEMPLATE) — sem lib nova, sem OAuth,
- * sem servidor guardando acesso. Duracao fixa de 3h porque o schema nao
- * guarda hora de termino do evento.
- */
-function googleCalendarUrl(ev: SunbiteEvent, lang: "pt" | "de", place: Place | null): string {
-  const title = (lang === "de" ? ev.label_de : ev.label_en) || place?.name || "Sunbite";
-  const start = new Date(ev.starts_at);
-  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: `Sunbite — ${title}`,
-    dates: `${toGCalStamp(start.toISOString())}/${toGCalStamp(end.toISOString())}`,
-  });
-  if (place?.name) params.set("location", place.city ? `${place.name}, ${place.city}` : place.name);
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
-}
 
 const PHASES: Phase[] = ["preparacao", "saida", "operacao", "encerramento"];
 

@@ -147,6 +147,19 @@ function SuppliersBody({ onClose }: { onClose: () => void }) {
            antes do clique fechar, entao o `blur` sempre dispara primeiro e nada
            digitado se perde. Redesenho de casca: nenhuma mudanca de gravacao. */
         <Modal title={editando.name} onClose={() => setEditandoId(null)}>
+          {/* O nome NUNCA foi editavel nesta tela — achado (nao regressao) ao
+              redesenha-la na Parte 3, e o mesmo buraco que existia em Locais.
+              Fechado na Parte 4, com a mesma cabeca nos dois lugares.
+              Nome vazio nao grava: `name` e `not null` no banco, e um card sem
+              nome seria intocavel. Apagar tudo e recarregar devolve o valor. */}
+          <CampoFornecedor
+            emoji="🏭"
+            label={t("suppliers.namePlaceholder")}
+            value={editando.name}
+            disabled={!online}
+            onChange={(v) => setItems((prev) => prev.map((x) => (x.id === editando.id ? { ...x, name: v } : x)))}
+            onCommit={(v) => (v.trim() ? void updateItem(editando.id, { name: v.trim() }) : void load())}
+          />
           <CampoFornecedor
             emoji="📦"
             label={t("suppliers.productPlaceholder")}

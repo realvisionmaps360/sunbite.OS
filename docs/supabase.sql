@@ -916,6 +916,18 @@ end $$;
 alter table public.places
   add column if not exists city text;
 
+-- ops 15 Parte 4 (31/08): endereco e posicao no mapa. `lat`/`lng` sao
+-- `double precision` porque e o que `navigator.geolocation` entrega, e
+-- `maps_url` fica guardada inteira mesmo quando nao carrega coordenada
+-- (o link curto `maps.app.goo.gl` nao carrega) — serve para abrir o Maps
+-- com um toque. ⚠️ Dado INTERNO por decisao do Felipe: nada disto entra em
+-- `public_events` nem no gatilho `sync_public_event`.
+alter table public.places
+  add column if not exists address  text,
+  add column if not exists lat      double precision,
+  add column if not exists lng      double precision,
+  add column if not exists maps_url text;
+
 alter table public.events
   add column if not exists event_type text
   check (event_type in ('market', 'festival', 'popup', 'private'));

@@ -123,7 +123,11 @@ export function SegmentedPicker<T extends string>({
             key={opt.value}
             onClick={() => onChange(opt.value)}
             disabled={disabled}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition active:scale-[0.97] disabled:opacity-40 ${
+            /* `min-h-11` = 44px. Medido no navegador na Parte 4: as abas
+               tinham 36px de altura, abaixo do minimo, e sao o caminho de
+               troca de aba em Locais, Estoque e Financeiro. Mesma regra que
+               levou os dois botoes da barra do PDV a 44x44 na Parte 3. */
+            className={`flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition active:scale-[0.97] disabled:opacity-40 ${
               active ? "bg-brand text-cream" : "bg-cream-soft text-ink"
             }`}
           >
@@ -156,7 +160,11 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm space-y-3 rounded-2xl bg-cream p-5 shadow-lg"
+        /* `max-h` + rolagem propria: a folha do local (Parte 4) tem sete
+           campos mais o bloco da posicao e passa de 780px de altura. Sem
+           isto o titulo saia cortado no topo e o fim da folha ficava
+           inalcancavel em 360x780 — visto em foto, nao deduzido. */
+        className="max-h-[85vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-cream p-5 shadow-lg"
       >
         <div className="flex items-start gap-3">
           <h2 className="flex-1 font-display text-xl">{title}</h2>
@@ -259,6 +267,25 @@ export function Linha({
  * ⚠️ Respeita `prefers-reduced-motion`: quem desligou animacao no aparelho
  * recebe so o Aviso, sem o balanco.
  */
+/**
+ * O rotulo do card encolhe em vez de quebrar no meio da palavra — a mesma
+ * decisao que `Valor.tsx` tomou para os numeros, aplicada ao texto.
+ *
+ * Nasceu na Parte 4 com um caso que o `break-words` sozinho nao resolve:
+ * "Weihnachtsmarkt Bahnhofstrasse" (30 letras) saia como "Weihnachtsmar/kt" na
+ * coluna de ~150px. `hyphens: auto` nao salva — o Chrome desta maquina nao tem
+ * dicionario alemao — e o U+00AD escrito a mao so serve para rotulo de i18n:
+ * **nome de local e dado que o Felipe digita**, nao texto que eu escrevo.
+ *
+ * Degraus medidos na coluna do grid de 2 em 360px: "Weihnachtsmarkt" sozinha
+ * ocupa ~150px em `text-xl` e ~120px em `text-base`.
+ */
+function tamanhoDoRotulo(label: string): string {
+  if (label.length <= 14) return "text-xl";
+  if (label.length <= 22) return "text-lg";
+  return "text-base";
+}
+
 export function Tile({
   icone,
   label,
@@ -305,11 +332,19 @@ export function Tile({
           inteira do grid cresce junto. */}
       <span
         lang={lang}
-        className="hyphens-auto w-full break-words text-center font-display text-xl leading-tight"
+        className={`hyphens-auto w-full break-words text-center font-display leading-tight ${tamanhoDoRotulo(label)}`}
       >
         {label}
       </span>
-      {apoio && <span className="w-full truncate text-center text-sm text-ink-muted">{apoio}</span>}
+      {/* A linha de apoio tambem quebra em vez de truncar. Ela era `truncate`
+          porque nasceu carregando "3 de 18" na tela de Operacao; na Parte 4
+          ela passou a carregar o **nome do local** de um evento, e
+          "Weihnachtsmarkt B…" nao identifica evento nenhum. */}
+      {apoio && (
+        <span lang={lang} className="hyphens-auto w-full break-words text-center text-sm text-ink-muted">
+          {apoio}
+        </span>
+      )}
       {pill}
     </motion.button>
   );
