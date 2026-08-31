@@ -35,7 +35,86 @@ const ROWS = {
     { local_date: new Date().toISOString().slice(0, 10), receita_dinheiro: 1234.5, receita_twint: 1234.5, receita_total: 2469, despesas: 1234.5, entradas: 100, movimentos_caixa: -312.5 },
     { local_date: "2026-08-25", receita_dinheiro: 210, receita_twint: 88, receita_total: 298, despesas: 0, entradas: 0, movimentos_caixa: 0 },
   ],
-  operations: [{ id: "op1", cash_initial: 1234.5 }],
+  // `status: "open"` de proposito: e o unico estado em que a fase Operacao e
+  // o Encerramento mostram o que tem para mostrar. As colunas sao as mesmas
+  // de producao — mock com meia linha esconde exatamente o que se quer ver.
+  operations: [
+    {
+      id: "op1",
+      local_date: new Date().toISOString().slice(0, 10),
+      place_id: "pl1",
+      event_id: "ev1",
+      status: "open",
+      cash_initial: 1234.5,
+      cash_final: null,
+      opened_by: "u-teste",
+      opened_at: "2026-08-28T09:12:00Z",
+      closed_by: null,
+      closed_at: null,
+      created_at: "2026-08-28T08:00:00Z",
+    },
+  ],
+  places: [
+    { id: "pl1", name: "Aarau Färberplatz", city: "Aarau" },
+    { id: "pl2", name: "Zofingen Altstadt", city: "Zofingen" },
+  ],
+  events: [
+    { id: "ev1", starts_at: "2026-08-28T10:00:00Z", label_de: "Wochenmarkt Aarau", label_en: "Aarau Market" },
+  ],
+  // Os 40 itens reais do banco (ops13-checklist-rodar-no-supabase.sql), com o
+  // apelido do desenho. O alemao aqui e o pior caso de largura de proposito —
+  // "Verwendbares Produkt sicher lagern" e o rotulo mais longo do checklist.
+  checklist_templates: [
+    ["preparacao", "Caixa vermelha", "Rote Kiste", "caixa-vermelha", false],
+    ["preparacao", "Dinheiro contado dentro da caixa", "Geld in der Kiste gezählt", "dinheiro", false],
+    ["preparacao", "Duas colheres de chocolate", "Zwei Schokoladenlöffel", "colher-chocolate", false],
+    ["preparacao", "Dois recipientes para chocolate", "Zwei Schokoladenbehälter", "recipiente-chocolate", false],
+    ["preparacao", "Duas tampas dos recipientes", "Zwei Behälterdeckel", "tampa", false],
+    ["preparacao", "Tripé para celular", "Handystativ", "tripe", false],
+    ["preparacao", "Carregador do celular", "Handyladegerät", "carregador", false],
+    ["preparacao", "Celular carregado", "Handy geladen", "celular", false],
+    ["preparacao", "Luvas pretas", "Schwarze Handschuhe", "luvas", false],
+    ["preparacao", "Sacos de lixo", "Abfallsäcke", "saco-lixo", false],
+    ["preparacao", "Caixa de som", "Lautsprecher", "caixa-som", false],
+    ["preparacao", "Caixa de som carregada", "Lautsprecher geladen", "caixa-som-bateria", false],
+    ["preparacao", "Bateria da geladeira carregada", "Kühlschrankbatterie geladen", "bateria-geladeira", true],
+    ["preparacao", "Bateria do motor carregada", "Motorbatterie geladen", "bateria-motor", true],
+    ["preparacao", "Pacotes de gelo", "Eispackungen", "gelo", false],
+    ["preparacao", "Gelo no congelador na véspera", "Eis am Vortag ins Gefrierfach", "congelador", false],
+    ["preparacao", "Material/QR Code TWINT", "TWINT-Material/QR-Code", "twint", false],
+    ["preparacao", "4 barras de ferro", "4 Eisenstangen", "barra-ferro", false],
+    ["saida", "Local confirmado", "Ort bestätigt", "local", false],
+    ["saida", "Horário confirmado", "Zeit bestätigt", "horario", false],
+    ["saida", "Autorização verificada", "Bewilligung geprüft", "autorizacao", true],
+    ["saida", "Morangos", "Erdbeeren", "morango", true],
+    ["saida", "Chocolate", "Schokolade", "chocolate", true],
+    ["saida", "Toppings", "Toppings", "topping", false],
+    ["saida", "Chantilly", "Schlagrahm", "chantilly", false],
+    ["saida", "Copos", "Becher", "copo", true],
+    ["saida", "Freio", "Bremse", "freio", true],
+    ["saida", "Bateria", "Batterie", "bateria", true],
+    ["operacao", "Abrir o teto para o painel solar", "Dach für das Solarpanel öffnen", "teto-solar", true],
+    ["encerramento", "Parar novos pedidos", "Keine neuen Bestellungen", "parar-pedidos", false],
+    ["encerramento", "Contabilizar ingredientes restantes", "Restliche Zutaten zählen", "contar-ingredientes", false],
+    ["encerramento", "Identificar produto descartável", "Wegwerfware bestimmen", "descartar", false],
+    ["encerramento", "Guardar produto aproveitável de forma segura", "Verwendbares Produkt sicher lagern", "guardar", false],
+    ["encerramento", "Fechar caixa", "Kasse abschliessen", "fechar-caixa", true],
+    ["encerramento", "Conferir TWINT", "TWINT prüfen", "conferir-twint", true],
+    ["encerramento", "Desligar equipamentos", "Geräte ausschalten", "desligar", false],
+    ["encerramento", "Limpar superfícies", "Oberflächen reinigen", "limpar", false],
+    ["encerramento", "Desmontar materiais", "Material abbauen", "desmontar", false],
+    ["encerramento", "Carregar equipamentos", "Geräte einladen", "carregar-bike", false],
+    ["encerramento", "Verificar se nada ficou no local", "Prüfen, ob nichts liegen bleibt", "nada-esquecido", false],
+  ].map(([phase, label_pt, label_de, icon, critical], i) => ({
+    id: "tp" + i,
+    phase,
+    label_pt,
+    label_de,
+    icon,
+    critical,
+    sort_order: i * 10,
+    active: true,
+  })),
   sales: [
     { total: 1234.5, payment: "cash", cancelled: false },
     { total: 1234.5, payment: "twint", cancelled: false },
@@ -102,6 +181,27 @@ const ROWS = {
 
 const MOCK_SUPABASE = `
 const ROWS = ${JSON.stringify(ROWS)};
+
+// ?checked= decide quanto do checklist ja esta marcado, porque a trava de
+// fase so da para fotografar em mais de um estado:
+//   (vazio) 12 de 18 na preparacao -> Saida, Operacao e Encerramento travadas
+//   prep    preparacao inteira     -> Saida aberta, Operacao travada
+//   all     tudo marcado           -> nada travado, da para ver o Encerramento
+const _marcado = new URLSearchParams(location.search).get("checked");
+ROWS.checklist_state = ROWS.checklist_templates
+  .filter((tp) =>
+    _marcado === "all" ||
+    (_marcado === "prep" && tp.phase === "preparacao") ||
+    (!_marcado && tp.phase === "preparacao" && tp.sort_order < 120))
+  .map((tp) => ({
+    id: "st-" + tp.id,
+    operation_id: "op1",
+    template_id: tp.id,
+    checked: true,
+    checked_by: "u-teste",
+    checked_at: "2026-08-28T08:30:00Z",
+  }));
+
 const result = (table) => {
   // order() ordena de verdade: enquanto era no-op, o preview nao conseguia
   // pegar erro de ordenacao — e chat sem ordem certa e chat errado.
@@ -110,14 +210,35 @@ const result = (table) => {
   // verdade faz. Sem isto, aprovar um card estourava no preview por um
   // motivo que nao existe em producao.
   let inserted = null;
-  const p = { then: (f) => Promise.resolve({ data: rows, error: null }).then(f) };
+  let sorts = [];
   const q = {
     select: () => q, eq: () => q, neq: () => q,
     insert: (row) => { inserted = { id: "novo-" + table, ...row }; return q; },
+    // Multi-chave de verdade. Era uma ordenacao so, e a ultima chamada
+    // desfazia a anterior — .order("phase").order("sort_order") do checklist
+    // perdia o agrupamento por fase, que em producao existe. Mock que ordena
+    // diferente do Postgres e mock que mente.
     order: (col, opts) => {
-      const asc = opts?.ascending !== false;
-      rows.sort((a, b) => (a?.[col] > b?.[col] ? 1 : a?.[col] < b?.[col] ? -1 : 0) * (asc ? 1 : -1));
+      sorts.push([col, opts?.ascending !== false]);
+      rows.sort((a, b) => {
+        for (const [c, asc] of sorts) {
+          const d = a?.[c] > b?.[c] ? 1 : a?.[c] < b?.[c] ? -1 : 0;
+          if (d) return d * (asc ? 1 : -1);
+        }
+        return 0;
+      });
       return q;
+    },
+    // A tela de Operacao grava por queueWrite -> outbox -> upsert. Sem isto,
+    // marcar um item do checklist estourava "q.upsert is not a function" —
+    // erro que nao existe em producao. Grava na copia em memoria, para o
+    // item continuar marcado se a tela recarregar os dados.
+    upsert: (row) => {
+      const lista = ROWS[table] ?? (ROWS[table] = []);
+      const i = lista.findIndex((r) => r.id === row.id);
+      if (i >= 0) lista[i] = { ...lista[i], ...row };
+      else lista.push(row);
+      return Promise.resolve({ data: [row], error: null });
     },
     limit: (n) => Promise.resolve({ data: rows.slice(0, n), error: null }),
     single: () => Promise.resolve({ data: inserted ?? rows[0] ?? null, error: null }),

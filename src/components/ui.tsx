@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { LangToggle, useLang } from "../i18n";
 
 /**
@@ -238,6 +239,159 @@ export function Linha({
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Cards no estilo da Home (Parte 2 da ops 13)                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * O card vertical da Home V2. Ate a ops 15 ele existia so inline dentro de
+ * HomeScreen.tsx, e a tela de Operacao teria virado uma segunda copia — duas
+ * copias do mesmo card e um jeito garantido de um dia elas discordarem.
+ *
+ * `tremer` e o erro suave: o card balanca e nada bloqueia. Trocar de valor
+ * dispara a animacao de novo (a chave da animacao e o proprio numero), entao
+ * tocar duas vezes numa fase bloqueada balanca duas vezes.
+ *
+ * ⚠️ Respeita `prefers-reduced-motion`: quem desligou animacao no aparelho
+ * recebe so o Aviso, sem o balanco.
+ */
+export function Tile({
+  icone,
+  label,
+  apoio,
+  pill,
+  onClick,
+  atenuado,
+  destacado,
+  tremer = 0,
+}: {
+  icone: ReactNode;
+  label: string;
+  apoio?: string;
+  pill?: ReactNode;
+  onClick: () => void;
+  atenuado?: boolean;
+  /** Anel claro em volta: "e por aqui que voce continua". */
+  destacado?: boolean;
+  tremer?: number;
+}) {
+  const semMovimento = useReducedMotion();
+  return (
+    <motion.button
+      onClick={onClick}
+      animate={tremer > 0 && !semMovimento ? { x: [0, -8, 8, -5, 5, 0] } : { x: 0 }}
+      transition={{ duration: 0.4 }}
+      key={tremer}
+      className={`flex min-w-0 flex-col items-center justify-center gap-1.5 rounded-3xl bg-cream px-3 py-6 text-brand-dark shadow-lg transition active:scale-[0.98] ${
+        atenuado ? "opacity-55" : ""
+      } ${destacado ? "ring-4 ring-cream/60" : ""}`}
+    >
+      <span className="flex h-12 w-12 items-center justify-center text-5xl leading-none">
+        {icone}
+      </span>
+      <span className="w-full truncate text-center font-display text-xl">{label}</span>
+      {apoio && <span className="w-full truncate text-center text-sm text-ink-muted">{apoio}</span>}
+      {pill}
+    </motion.button>
+  );
+}
+
+/**
+ * Grade dos cards. Duas colunas para as fases, tres para os itens do
+ * checklist — os nomes de classe sao literais de proposito: o Tailwind v4 le
+ * o codigo-fonte, e `grid-cols-${n}` montado em tempo de execucao nao gera
+ * classe nenhuma.
+ */
+export function GridCards({ colunas = 2, children }: { colunas?: 2 | 3; children: ReactNode }) {
+  return (
+    <div className={`grid gap-3 ${colunas === 3 ? "grid-cols-3" : "grid-cols-2"}`}>{children}</div>
+  );
+}
+
+/**
+ * O item do checklist como botao fisico. Marcado nao e texto riscado: o botao
+ * **afunda** (sombra interna, escala menor, fundo tingido) e ganha o visto no
+ * canto. Riscar deixava o rotulo ilegivel no sol, e a Romana marca isso com a
+ * mao molhada de morango.
+ *
+ * Alvo de toque: `py-3` + a moldura do desenho da 88px de altura, bem acima
+ * dos 44px minimos.
+ */
+export function CardToggle({
+  icone,
+  label,
+  marcado,
+  selo,
+  onClick,
+}: {
+  icone: ReactNode;
+  label: string;
+  marcado: boolean;
+  selo?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={marcado}
+      className={`relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center transition ${
+        marcado
+          ? "scale-[0.97] bg-brand/15 shadow-inner"
+          : "bg-cream shadow-sm active:scale-[0.97]"
+      }`}
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center">{icone}</span>
+      {/* Sem `line-clamp`: em 3 colunas de 360px o card tem ~100px, e
+          "Dinheiro contado dentro da caixa" saia como "Dinheiro contado
+          dentr…". Rotulo de item cortado e defeito — quem le "Bateria da
+          geladeira…" nao sabe se e a carregada ou a de reserva. O card cresce
+          e a linha inteira do grid cresce junto, que e o comportamento certo.
+          `break-words` porque o alemao tem palavra de 19 letras
+          (Kuehlschrankbatterie) que estoura 100px sozinha. */}
+      <span className="w-full break-words text-xs font-semibold leading-tight text-brand-dark">
+        {label}
+      </span>
+      {selo}
+      {marcado && (
+        <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-xs font-bold text-cream">
+          ✓
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Recado que sobe, avisa e some — nunca bloqueia toque nenhum
+ * (`pointer-events-none`). Ate a ops 15 o unico aviso do app era um banner
+ * preso dentro de App.tsx, que nenhuma outra tela alcancava.
+ *
+ * Quem chama controla o tempo: passar `null` em `texto` faz sumir.
+ */
+export function Aviso({ texto }: { texto: string | null }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4">
+      <AnimatePresence>
+        {texto && (
+          <motion.p
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            /* Creme com borda escura, e nao `bg-brand-dark`: o aviso sobe tanto
+               sobre a grade das fases (fundo `bg-brand`, vermelho) quanto
+               dentro de uma fase (fundo creme). Vermelho escuro sobre vermelho
+               ficou ilegivel — visto em screenshot. A borda e a sombra e o que
+               faz o creme se separar do creme. */
+            className="max-w-sm rounded-2xl border-2 border-brand-dark bg-cream px-4 py-3 text-center text-sm font-semibold text-brand-dark shadow-xl"
+          >
+            {texto}
+          </motion.p>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

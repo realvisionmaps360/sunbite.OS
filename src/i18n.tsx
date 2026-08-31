@@ -266,6 +266,15 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     "checklist.critical": "crítico",
     "checklist.empty": "Nenhum item nesta fase.",
+    "checklist.progress": "{done} de {total}",
+    "checklist.state.locked": "bloqueada",
+    "checklist.state.doing": "em andamento",
+    "checklist.state.done": "concluída",
+    // Erro suave da trava de fase. O card balanca e este recado sobe — nada
+    // bloqueia. Plural pelo `_one`, que o t() resolve com `n`.
+    "checklist.locked_one": "Falta 1 item em {phase}.",
+    "checklist.locked": "Faltam {n} itens em {phase}.",
+    "checklist.backToPhases": "Fases",
 
     // A tabela continua se chamando `pendencies` e as chaves continuam
     // `pendency.*` — so o rotulo virou Ocorrencia (V2, decisao 9). Renomear
@@ -764,6 +773,13 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     "checklist.critical": "kritisch",
     "checklist.empty": "Kein Punkt in dieser Phase.",
+    "checklist.progress": "{done} von {total}",
+    "checklist.state.locked": "gesperrt",
+    "checklist.state.doing": "läuft",
+    "checklist.state.done": "erledigt",
+    "checklist.locked_one": "1 Punkt fehlt in {phase}.",
+    "checklist.locked": "{n} Punkte fehlen in {phase}.",
+    "checklist.backToPhases": "Phasen",
 
     "pendency.title": "Vorfälle",
     "pendency.add": "Neuer Vorfall",

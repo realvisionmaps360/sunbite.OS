@@ -5,7 +5,8 @@ import { today } from "../db";
 import { money } from "../config";
 import { useLang } from "../i18n";
 import { flushOutbox, queueWrite } from "../outbox";
-import { AdminHeader, Linha, TileButton } from "./ui";
+import { AdminHeader, Aviso, CardToggle, GridCards, Linha, StatusPill, Tile, TileButton } from "./ui";
+import { Ilustracao } from "./ilustracoes";
 import {
   cacheOpenOperationView,
   phaseFor,
@@ -87,7 +88,17 @@ function OperationBody({
   const [pendencies, setPendencies] = useState<Pendency[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
   const [events, setEvents] = useState<SunbiteEvent[]>([]);
-  const [tab, setTab] = useState<Phase>("preparacao");
+  /**
+   * `null` = a grade das quatro fases; uma fase = a lista daquela fase.
+   * Ate a ops 15 isto era `tab`, e um efeito trocava a aba sozinho a cada
+   * mudanca de estado — no meio do toque da Romana. Agora quem navega e so
+   * o dedo dela.
+   */
+  const [vista, setVista] = useState<Phase | null>(null);
+  /** Recado do erro suave da trava. Some sozinho; nunca bloqueia toque. */
+  const [aviso, setAviso] = useState<string | null>(null);
+  /** Qual card balanca, e quantas vezes ja balancou (a chave da animacao). */
+  const [tremendo, setTremendo] = useState<{ fase: Phase; n: number } | null>(null);
   const [cashInitial, setCashInitial] = useState("");
   const [cashFinal, setCashFinal] = useState("");
   const [closeReason, setCloseReason] = useState("");
@@ -201,9 +212,12 @@ function OperationBody({
     return () => window.removeEventListener("online", onOnline);
   }, []);
 
+  /** O recado da trava some sozinho — 4s e o bastante para ler duas linhas. */
   useEffect(() => {
-    if (operation) setTab(phaseFor(operation.status, prepDone(templates, states)));
-  }, [operation, templates, states]);
+    if (!aviso) return;
+    const id = window.setTimeout(() => setAviso(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [aviso]);
 
   async function startOperation() {
     const row: Operation = {
@@ -330,12 +344,70 @@ function OperationBody({
       : null;
   const precisaMotivo = diferenca !== null && diferenca !== 0;
 
-  const phaseTemplates = templates.filter((tp) => tp.phase === tab);
+
   const stateByTemplate = new Map(states.map((s) => [s.template_id, s]));
+
+  /** Quantos itens da fase ja foram marcados. Fase sem item nenhum: 0 de 0. */
+  function progresso(p: Phase) {
+    const itens = templates.filter((tp) => tp.phase === p);
+    const feitos = itens.filter((tp) => stateByTemplate.get(tp.id)?.checked).length;
+    return { feitos, total: itens.length };
+  }
+
+  /**
+   * A trava de hierarquia (decisao do Felipe, 28/08): uma fase so abre quando
+   * **todos** os itens de **todas** as fases anteriores estao marcados.
+   * Devolve a primeira fase incompleta, ou null se pode entrar.
+   *
+   * ⚠️ Vale so para os cards. `openOperation` e `closeOperation` continuam
+   * livres de proposito — nada pode travar a Romana no meio da feira.
+   */
+  function travaDe(p: Phase): { fase: Phase; faltam: number } | null {
+    const ate = PHASES.indexOf(p);
+    for (let i = 0; i < ate; i++) {
+      const { feitos, total } = progresso(PHASES[i]);
+      if (feitos < total) return { fase: PHASES[i], faltam: total - feitos };
+    }
+    return null;
+  }
+
+  /** Erro suave: o card balanca, sobe o recado, e nada bloqueia. */
+  function abrirFase(p: Phase) {
+    const trava = travaDe(p);
+    if (!trava) {
+      setVista(p);
+      return;
+    }
+    setTremendo({ fase: p, n: (tremendo?.n ?? 0) + 1 });
+    setAviso(
+      t("checklist.locked", {
+        n: trava.faltam,
+        phase: t(`operation.phase.${trava.fase}`),
+      }),
+    );
+  }
+
+  /**
+   * Qual card ganha o anel de "continue por aqui". `phaseFor` deixou de trocar
+   * a tela sozinho (era o efeito que roubava a aba) e passou a fazer so isto.
+   */
+  const faseSugerida: Phase = operation
+    ? phaseFor(operation.status, prepDone(templates, states))
+    : "preparacao";
+
+  const EMOJI_FASE: Record<Phase, string> = {
+    preparacao: "🧰",
+    saida: "🚚",
+    operacao: "🎪",
+    encerramento: "🌙",
+  };
+
+  const itensDaVista = vista ? templates.filter((tp) => tp.phase === vista) : [];
 
   return (
     <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("operation.title")} onClose={onClose} />
+      <Aviso texto={aviso} />
 
       {!navigator.onLine && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">
@@ -357,260 +429,295 @@ function OperationBody({
         </div>
       )}
 
-      {!loading && operation && (
-        <>
-          <nav className="grid grid-cols-2 gap-2 bg-brand px-3 pb-3">
-            {PHASES.map((p) => (
-              <button
-                key={p}
-                onClick={() => setTab(p)}
-                className={`min-w-0 truncate rounded-full px-2 py-2 text-sm font-semibold transition ${
-                  tab === p ? "bg-cream text-brand-dark" : "bg-black/20 text-cream"
-                }`}
-              >
-                {t(`operation.phase.${p}`)}
-              </button>
-            ))}
-          </nav>
-
-          <div className="flex-1 space-y-4 p-4">
-            {tab !== "operacao" && (
-              <ul className="divide-y divide-black/10 rounded-2xl bg-cream">
-                {phaseTemplates.length === 0 && (
-                  <li className="p-4 text-center text-ink-muted">{t("checklist.empty")}</li>
-                )}
-                {phaseTemplates.map((tpl) => {
-                  const st = stateByTemplate.get(tpl.id);
-                  return (
-                    <li key={tpl.id}>
-                      <button
-                        onClick={() => void toggleItem(tpl)}
-                        className="flex w-full items-center gap-3 p-3 text-left"
-                      >
-                        <span
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-                            st?.checked ? "border-brand bg-brand text-cream" : "border-black/20"
-                          }`}
-                        >
-                          {st?.checked ? "✓" : ""}
-                        </span>
-                        <span className={st?.checked ? "line-through opacity-50" : ""}>
-                          {lang === "de" ? tpl.label_de : tpl.label_pt}
-                        </span>
-                        {tpl.critical && (
-                          <span className="ml-auto shrink-0 rounded-full bg-red-700/10 px-2 py-0.5 text-xs font-semibold text-red-800">
-                            {t("checklist.critical")}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            {tab === "saida" && (
-              <div className="space-y-2 rounded-2xl bg-cream p-4">
-                <label className="block text-sm font-semibold">{t("operation.place")}</label>
-                <select
-                  value={operation.place_id ?? ""}
-                  onChange={(e) => void linkPlaceEvent({ place_id: e.target.value || null })}
-                  className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
-                >
-                  <option value="">{t("places.noPlace")}</option>
-                  {places.map((pl) => (
-                    <option key={pl.id} value={pl.id}>
-                      {pl.name}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="block text-sm font-semibold">{t("operation.event")}</label>
-                <select
-                  value={operation.event_id ?? ""}
-                  onChange={(e) => void linkPlaceEvent({ event_id: e.target.value || null })}
-                  className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
-                >
-                  <option value="">{t("operation.noEvent")}</option>
-                  {events.map((ev) => (
-                    <option key={ev.id} value={ev.id}>
-                      {new Date(ev.starts_at).toLocaleDateString()} · {(lang === "de" ? ev.label_de : ev.label_en) || t("operation.event")}
-                    </option>
-                  ))}
-                </select>
-
-                {(() => {
-                  const linkedEvent = events.find((ev) => ev.id === operation.event_id);
-                  if (!linkedEvent) return null;
-                  const linkedPlace = places.find((pl) => pl.id === operation.place_id) ?? null;
-                  return (
-                    <a
-                      href={googleCalendarUrl(linkedEvent, lang, linkedPlace)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block w-full rounded-2xl border-2 border-brand py-3 text-center font-semibold text-brand"
-                    >
-                      {t("operation.addToCalendar")}
-                    </a>
-                  );
-                })()}
-              </div>
-            )}
-
-            {tab === "saida" && operation.status === "planned" && (
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold">
-                  {t("operation.cashInitial")}
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={cashInitial}
-                  onChange={(e) => setCashInitial(e.target.value)}
-                  className="w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
+      {/* ---------- A grade das quatro fases (estilo Home V2) ---------- */}
+      {!loading && operation && vista === null && (
+        <div className="flex-1 space-y-5 bg-brand p-4">
+          <GridCards>
+            {PHASES.map((p) => {
+              const { feitos, total } = progresso(p);
+              const trava = travaDe(p);
+              const completa = total > 0 && feitos === total;
+              return (
+                <Tile
+                  key={p}
+                  icone={EMOJI_FASE[p]}
+                  label={t(`operation.phase.${p}`)}
+                  apoio={t("checklist.progress", { done: feitos, total })}
+                  atenuado={!!trava}
+                  destacado={!trava && p === faseSugerida}
+                  tremer={tremendo?.fase === p ? tremendo.n : 0}
+                  onClick={() => abrirFase(p)}
+                  pill={
+                    <StatusPill tone={trava ? "neutral" : completa ? "ok" : "warn"}>
+                      {t(
+                        trava
+                          ? "checklist.state.locked"
+                          : completa
+                            ? "checklist.state.done"
+                            : "checklist.state.doing",
+                      )}
+                    </StatusPill>
+                  }
                 />
-                <button
-                  onClick={() => void openOperation()}
-                  className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream"
-                >
-                  {t("operation.open")}
-                </button>
-              </div>
-            )}
+              );
+            })}
+          </GridCards>
 
-            {tab === "operacao" && (
-              <div className="space-y-3 rounded-2xl bg-cream p-4">
-                <h2 className="font-display text-xl">{t("operation.summary")}</h2>
-                {operation.opened_at && (
-                  <p className="text-sm text-ink-muted">
-                    {t("operation.openedInfo", {
-                      time: new Date(operation.opened_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                      who: operation.opened_by === identity.userId ? identity.email : "—",
-                    })}
-                  </p>
-                )}
-                <button
-                  onClick={() => setTab("encerramento")}
-                  className="w-full rounded-2xl border-2 border-brand py-3 font-semibold text-brand"
-                >
-                  {t("operation.goToClose")}
-                </button>
-              </div>
-            )}
+          {/* Ocorrencias em container proprio, com respiro — nao e uma quinta
+              fase, e nao pode parecer uma. */}
+          <section className="space-y-3 rounded-3xl bg-cream-soft p-4">
+            <h2 className="font-display text-xl">{t("pendency.title")}</h2>
+            {/* Mesma folha que abre de dentro do PDV — um caminho so para
+                registrar ocorrencia, aqui e la. */}
+            <TileButton
+              emoji="⚠️"
+              label={t("pendency.add")}
+              variant="dashed"
+              onClick={() => setOccurrence(true)}
+            />
 
-            {tab === "encerramento" && operation.status === "open" && (
-              <div className="space-y-3 rounded-2xl bg-cream p-4">
-                <h2 className="font-display text-xl">{t("close.title")}</h2>
-
-                <label className="block text-sm font-semibold">{t("operation.cashFinal")}</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={cashFinal}
-                  onChange={(e) => setCashFinal(e.target.value)}
-                  className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-3 text-xl tabular-nums"
-                />
-
-                {expected && (
-                  <div className="space-y-1">
-                    {/* Esperado × contado × diferenca (PRD 7.3). Cada linha e
-                        uma grade de duas colunas: o valor nunca disputa
-                        largura com o rotulo. */}
-                    <Linha label={t("close.expected")} value={money(expected.expected)} />
-                    <Linha
-                      label={t("close.counted")}
-                      value={contado === null ? "—" : money(contado)}
-                    />
-                    <Linha
-                      label={t("close.difference")}
-                      value={diferenca === null ? "—" : money(diferenca)}
-                      destaque={precisaMotivo}
-                    />
-                    <p className="pt-1 text-xs text-ink-muted">
-                      {t("close.breakdown", {
-                        initial: money(expected.initial),
-                        sales: money(expected.cashSales),
-                      })}
-                      {(expected.entries || expected.costs || expected.movements) !== 0 &&
-                        ` · ${t("close.adjustments", {
-                          value: money(
-                            expected.entries - expected.costs + expected.movements,
-                          ),
-                        })}`}
-                    </p>
-                    <p className="text-xs text-ink-muted">
-                      {t("close.twintNote", { value: money(expected.twintSales) })}
-                    </p>
-                  </div>
-                )}
-
-                {precisaMotivo && (
-                  <>
-                    <label className="block text-sm font-semibold">{t("close.reason")}</label>
-                    <input
-                      value={closeReason}
-                      onChange={(e) => setCloseReason(e.target.value)}
-                      placeholder={t("close.reasonPlaceholder")}
-                      className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
-                    />
-                    {!closeReason.trim() && (
-                      <p className="text-sm font-semibold text-red-800">
-                        {t("close.reasonRequired")}
-                      </p>
+            <ul className="divide-y divide-black/10 rounded-2xl bg-cream">
+              {pendencies.length === 0 && (
+                <li className="p-4 text-center text-ink-muted">{t("pendency.empty")}</li>
+              )}
+              {pendencies.map((p) => (
+                <li key={p.id} className="flex items-center gap-3 p-3">
+                  <span className="flex-1">
+                    {p.description}
+                    {p.critical && (
+                      <span className="ml-2 rounded-full bg-red-700/10 px-2 py-0.5 text-xs font-semibold text-red-800">
+                        {t("pendency.critical")}
+                      </span>
                     )}
-                  </>
-                )}
+                  </span>
+                  <button
+                    onClick={() => void resolvePendency(p)}
+                    className="shrink-0 rounded-lg border border-brand px-3 py-1 text-sm font-semibold text-brand"
+                  >
+                    {t("pendency.resolve")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
 
-                <button
-                  onClick={() => void closeOperation()}
-                  disabled={precisaMotivo && !closeReason.trim()}
-                  className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream disabled:opacity-40"
-                >
-                  {t("close.confirm")}
-                </button>
-              </div>
-            )}
+      {/* ---------- Dentro de uma fase ---------- */}
+      {!loading && operation && vista !== null && (
+        <div className="flex-1 space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setVista(null)}
+              className="flex shrink-0 items-center gap-1 rounded-lg py-2 pr-2 font-semibold text-brand"
+            >
+              <span className="text-xl leading-none">‹</span>
+              {t("checklist.backToPhases")}
+            </button>
+            <h2 className="min-w-0 flex-1 truncate font-display text-xl">
+              {t(`operation.phase.${vista}`)}
+            </h2>
+            <span className="shrink-0 text-sm text-ink-muted">
+              {t("checklist.progress", {
+                done: progresso(vista).feitos,
+                total: progresso(vista).total,
+              })}
+            </span>
+          </div>
 
-            <section className="space-y-3">
-              <h2 className="font-display text-xl">{t("pendency.title")}</h2>
-              {/* Mesma folha que abre de dentro do PDV — um caminho so para
-                  registrar ocorrencia, aqui e la. */}
-              <TileButton
-                emoji="⚠️"
-                label={t("pendency.add")}
-                variant="dashed"
-                onClick={() => setOccurrence(true)}
+          {/* A fase `operacao` mostra a lista como as outras. Ate a ops 15 a
+              condicao era `tab !== "operacao"`, e o item do teto solar estava
+              gravado no banco sem aparecer em tela nenhuma. */}
+          {itensDaVista.length === 0 ? (
+            <p className="rounded-2xl bg-cream p-4 text-center text-ink-muted">
+              {t("checklist.empty")}
+            </p>
+          ) : (
+            <GridCards colunas={3}>
+              {itensDaVista.map((tpl) => (
+                <CardToggle
+                  key={tpl.id}
+                  icone={<Ilustracao slug={tpl.icon} />}
+                  label={lang === "de" ? tpl.label_de : tpl.label_pt}
+                  marcado={!!stateByTemplate.get(tpl.id)?.checked}
+                  onClick={() => void toggleItem(tpl)}
+                  selo={
+                    tpl.critical ? (
+                      <StatusPill tone="danger">{t("checklist.critical")}</StatusPill>
+                    ) : undefined
+                  }
+                />
+              ))}
+            </GridCards>
+          )}
+
+          {vista === "saida" && (
+            <div className="space-y-2 rounded-2xl bg-cream p-4">
+              <label className="block text-sm font-semibold">{t("operation.place")}</label>
+              <select
+                value={operation.place_id ?? ""}
+                onChange={(e) => void linkPlaceEvent({ place_id: e.target.value || null })}
+                className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
+              >
+                <option value="">{t("places.noPlace")}</option>
+                {places.map((pl) => (
+                  <option key={pl.id} value={pl.id}>
+                    {pl.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="block text-sm font-semibold">{t("operation.event")}</label>
+              <select
+                value={operation.event_id ?? ""}
+                onChange={(e) => void linkPlaceEvent({ event_id: e.target.value || null })}
+                className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
+              >
+                <option value="">{t("operation.noEvent")}</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {new Date(ev.starts_at).toLocaleDateString()} ·{" "}
+                    {(lang === "de" ? ev.label_de : ev.label_en) || t("operation.event")}
+                  </option>
+                ))}
+              </select>
+
+              {(() => {
+                const linkedEvent = events.find((ev) => ev.id === operation.event_id);
+                if (!linkedEvent) return null;
+                const linkedPlace = places.find((pl) => pl.id === operation.place_id) ?? null;
+                return (
+                  <a
+                    href={googleCalendarUrl(linkedEvent, lang, linkedPlace)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full rounded-2xl border-2 border-brand py-3 text-center font-semibold text-brand"
+                  >
+                    {t("operation.addToCalendar")}
+                  </a>
+                );
+              })()}
+            </div>
+          )}
+
+          {vista === "saida" && operation.status === "planned" && (
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold">{t("operation.cashInitial")}</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={cashInitial}
+                onChange={(e) => setCashInitial(e.target.value)}
+                className="w-full rounded-lg border border-black/20 bg-cream px-3 py-2"
+              />
+              {/* Sem trava aqui de proposito: abrir a operacao nunca depende
+                  do checklist estar completo. */}
+              <button
+                onClick={() => void openOperation()}
+                className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream"
+              >
+                {t("operation.open")}
+              </button>
+            </div>
+          )}
+
+          {vista === "operacao" && (
+            <div className="space-y-3 rounded-2xl bg-cream p-4">
+              <h2 className="font-display text-xl">{t("operation.summary")}</h2>
+              {operation.opened_at && (
+                <p className="text-sm text-ink-muted">
+                  {t("operation.openedInfo", {
+                    time: new Date(operation.opened_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                    who: operation.opened_by === identity.userId ? identity.email : "—",
+                  })}
+                </p>
+              )}
+              <button
+                onClick={() => abrirFase("encerramento")}
+                className="w-full rounded-2xl border-2 border-brand py-3 font-semibold text-brand"
+              >
+                {t("operation.goToClose")}
+              </button>
+            </div>
+          )}
+
+          {vista === "encerramento" && operation.status === "open" && (
+            <div className="space-y-3 rounded-2xl bg-cream p-4">
+              <h2 className="font-display text-xl">{t("close.title")}</h2>
+
+              <label className="block text-sm font-semibold">{t("operation.cashFinal")}</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={cashFinal}
+                onChange={(e) => setCashFinal(e.target.value)}
+                className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-3 text-xl tabular-nums"
               />
 
-              <ul className="divide-y divide-black/10 rounded-2xl bg-cream">
-                {pendencies.length === 0 && (
-                  <li className="p-4 text-center text-ink-muted">{t("pendency.empty")}</li>
-                )}
-                {pendencies.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 p-3">
-                    <span className="flex-1">
-                      {p.description}
-                      {p.critical && (
-                        <span className="ml-2 rounded-full bg-red-700/10 px-2 py-0.5 text-xs font-semibold text-red-800">
-                          {t("pendency.critical")}
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      onClick={() => void resolvePendency(p)}
-                      className="shrink-0 rounded-lg border border-brand px-3 py-1 text-sm font-semibold text-brand"
-                    >
-                      {t("pendency.resolve")}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </div>
-        </>
+              {expected && (
+                <div className="space-y-1">
+                  {/* Esperado × contado × diferenca (PRD 7.3). Cada linha e
+                      uma grade de duas colunas: o valor nunca disputa
+                      largura com o rotulo. */}
+                  <Linha label={t("close.expected")} value={money(expected.expected)} />
+                  <Linha
+                    label={t("close.counted")}
+                    value={contado === null ? "—" : money(contado)}
+                  />
+                  <Linha
+                    label={t("close.difference")}
+                    value={diferenca === null ? "—" : money(diferenca)}
+                    destaque={precisaMotivo}
+                  />
+                  <p className="pt-1 text-xs text-ink-muted">
+                    {t("close.breakdown", {
+                      initial: money(expected.initial),
+                      sales: money(expected.cashSales),
+                    })}
+                    {(expected.entries || expected.costs || expected.movements) !== 0 &&
+                      ` · ${t("close.adjustments", {
+                        value: money(expected.entries - expected.costs + expected.movements),
+                      })}`}
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    {t("close.twintNote", { value: money(expected.twintSales) })}
+                  </p>
+                </div>
+              )}
+
+              {precisaMotivo && (
+                <>
+                  <label className="block text-sm font-semibold">{t("close.reason")}</label>
+                  <input
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                    placeholder={t("close.reasonPlaceholder")}
+                    className="w-full rounded-lg border border-black/20 bg-cream-soft px-3 py-2"
+                  />
+                  {!closeReason.trim() && (
+                    <p className="text-sm font-semibold text-red-800">
+                      {t("close.reasonRequired")}
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* Sem trava de fase aqui: fechar o caixa nunca depende do
+                  checklist. A unica confirmacao do app continua sendo o
+                  motivo escrito quando a diferenca nao e zero (decisao 7). */}
+              <button
+                onClick={() => void closeOperation()}
+                disabled={precisaMotivo && !closeReason.trim()}
+                className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream disabled:opacity-40"
+              >
+                {t("close.confirm")}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {occurrence && (

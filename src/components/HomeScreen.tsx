@@ -6,8 +6,9 @@ import { getCachedOpenOperation, type OpenOperationView } from "../operations";
 import { isActive } from "../types";
 import { Valor } from "./Valor";
 import type { Screen } from "../App";
+import { GridCards, Tile } from "./ui";
 
-interface Tile {
+interface TileDef {
   emoji: string;
   labelKey: string;
   screen: Screen;
@@ -19,7 +20,7 @@ interface Tile {
  * Compras abre dentro de Estoque, o resto dentro de Ajustes. A regra 4 da V2
  * e essa: funcao nova nao ganha botao na Home automaticamente.
  */
-const TILES: Tile[] = [
+const TILES: TileDef[] = [
   { emoji: "🎪", labelKey: "home.operation", screen: "operation" },
   { emoji: "📋", labelKey: "home.sales", screen: "sales" },
   { emoji: "💰", labelKey: "home.finance", screen: "finance" },
@@ -150,17 +151,19 @@ export function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) 
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 px-4 content-start">
-        {TILES.map((tile) => (
-          <button
-            key={tile.screen}
-            onClick={() => onNavigate(tile.screen)}
-            className="flex flex-col items-center justify-center gap-2 rounded-3xl bg-cream py-6 text-brand-dark shadow-lg transition active:scale-[0.98]"
-          >
-            <span className="text-5xl leading-none">{tile.emoji}</span>
-            <span className="font-display text-xl">{t(tile.labelKey)}</span>
-          </button>
-        ))}
+      {/* O card e o mesmo `Tile` da tela de Operacao (ui.tsx) — uma copia so,
+          para as duas telas nunca divergirem de estilo. */}
+      <div className="px-4 content-start">
+        <GridCards>
+          {TILES.map((tile) => (
+            <Tile
+              key={tile.screen}
+              icone={tile.emoji}
+              label={t(tile.labelKey)}
+              onClick={() => onNavigate(tile.screen)}
+            />
+          ))}
+        </GridCards>
       </div>
 
       {/* Ajustes em posicao secundaria (§4.5) — e a porta unica para Precos,
