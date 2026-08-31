@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { TOPPINGS, money } from "../config";
+import { TOPPINGS, money, toppingEmoji } from "../config";
 import { allSales, cancelSale, correctSale, today } from "../db";
 import { LangToggle, useLang } from "../i18n";
 import { byDay, shortDate, summarize, toppingRanking } from "../sales";
@@ -150,7 +150,7 @@ function TodayTab({
         <div className="grid grid-cols-3 gap-2 text-center">
           <Stat label={t("stat.sales")} value={String(ativas.length)} />
           <Stat label={t("stat.cups")} value={String(cups)} />
-          <Stat label={t("stat.total")} value={<Valor chf={total} />} />
+          <Stat label={t("stat.total")} value={<Valor chf={total} tamanho="cartao" />} />
         </div>
         <p className="mt-2 text-center text-sm opacity-70">
           {t("stat.cashbox", { cash: money(cash), twint: money(total - cash) })}
@@ -166,8 +166,8 @@ function TodayTab({
           const cancelada = !isActive(s);
           return (
             <li key={s.id} className={`p-4 ${cancelada ? "opacity-50" : ""}`}>
-              <div className="flex items-start justify-between">
-                <div className="min-w-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <p className={`font-semibold ${cancelada ? "line-through" : ""}`}>
                     {s.local_time.slice(0, 5)} · {s.cup_count}{" "}
                     {t(s.cup_count === 1 ? "order.cup" : "order.cups")}
@@ -175,22 +175,14 @@ function TodayTab({
                       {t(s.payment === "cash" ? "pay.cash" : "pay.twint")}
                     </span>
                   </p>
-                  <p className="truncate text-sm text-ink-muted">
-                    {s.cups
-                      .map(
-                        (c, i) =>
-                          `${i + 1}: ${
-                            c.toppings.length
-                              ? c.toppings.map((x) => t(`topping.${x}`)).join("+")
-                              : t("sales.pure")
-                          }`,
-                      )
-                      .join(" | ")}
-                  </p>
                 </div>
-                <div className="ml-3 shrink-0 text-right">
+                {/* Largura propria (w-28 = 112px), nao `shrink-0` cego: a coluna
+                    precisa caber "CHF 1234.50" (~88px em text-base) e
+                    "synchronisiert" (~78px em text-xs) sem roubar o resto da
+                    linha nem esmagar o cabecalho da venda. */}
+                <div className="w-28 shrink-0 text-right">
                   <p
-                    className={`tabular-nums font-semibold ${
+                    className={`whitespace-nowrap tabular-nums font-semibold ${
                       cancelada ? "line-through" : ""
                     }`}
                   >
@@ -210,6 +202,34 @@ function TodayTab({
                   </p>
                 </div>
               </div>
+
+              {/* Os copos como fichas, na largura toda da linha — no espirito
+                  do que o iPad do cliente ja faz (`Display.tsx`). Era uma
+                  linha `truncate`, e com 3 copos em alemao ela mostrava so o
+                  primeiro ("1: Mandeln+Kokos | 2:…"): conferir uma venda
+                  olhando a lista era impossivel. Uma ficha por copo, com o
+                  numero no circulo, quebrando em quantas linhas precisar.
+                  `break-words` porque topping em alemao pode estourar a ficha
+                  sozinho. */}
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {s.cups.map((c, i) => (
+                  <li
+                    key={i}
+                    className="flex max-w-full items-center gap-1.5 rounded-full bg-black/5 py-1 pl-1 pr-2.5"
+                  >
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand/15 text-[11px] font-bold text-brand">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 break-words text-sm leading-tight text-ink-muted">
+                      {c.toppings.length
+                        ? c.toppings
+                            .map((x) => `${toppingEmoji(x)} ${t(`topping.${x}`)}`)
+                            .join(" + ")
+                        : t("sales.pure")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
               {isCorrected(s) && !cancelada && (
                 <p className="mt-1 text-sm text-brand">
@@ -474,12 +494,22 @@ function SummaryTab({ sales }: { sales: Sale[] }) {
 
 /* -------------------------------------------------------------- peças */
 
+/**
+ * Um dos tres numeros do topo. Em 360px cada um tem ~104px, ~96px uteis
+ * depois do `px-1` — e o rotulo alemao ("Verkäufe") nao tinha protecao de
+ * largura nenhuma. Hoje o rotulo quebra em vez de vazar (`break-words`,
+ * `leading-tight`, `tracking-wide` em vez de `tracking-wider`) e o valor em
+ * CHF vem por `<Valor>`, que escolhe o tamanho da fonte pelo comprimento do
+ * texto — "CHF 1234.50" cai sozinho para `text-base`.
+ */
 function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     // px-1: sem respiro lateral o numero encosta na borda e parece quebrado
-    <div className="rounded-xl bg-black/20 px-1 py-2">
-      <p className="text-xs uppercase tracking-wider opacity-70">{label}</p>
-      <div className="font-display text-xl tabular-nums">{value}</div>
+    <div className="min-w-0 rounded-xl bg-black/20 px-1 py-2">
+      <p className="break-words text-xs uppercase leading-tight tracking-wide opacity-70">
+        {label}
+      </p>
+      <div className="min-w-0 font-display text-xl tabular-nums">{value}</div>
     </div>
   );
 }

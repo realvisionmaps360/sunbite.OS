@@ -280,6 +280,11 @@ export function Tile({
   tremer?: number;
 }) {
   const semMovimento = useReducedMotion();
+  /* `lang` no rotulo para o navegador saber onde parte a palavra composta
+     alema: sem ele, `hyphens: auto` nao tem dicionario e "Kundenanzeige"
+     quebra em "Kundenanzei/ge". `hyphens` existe desde o Safari 9 — dentro
+     do piso 15. */
+  const { lang } = useLang();
   return (
     <motion.button
       onClick={onClick}
@@ -293,7 +298,17 @@ export function Tile({
       <span className="flex h-12 w-12 items-center justify-center text-5xl leading-none">
         {icone}
       </span>
-      <span className="w-full truncate text-center font-display text-xl">{label}</span>
+      {/* `break-words`, nunca `truncate`: em 360px a coluna do grid tem ~134px
+          e "Kundenanzeige" saia como "Kundenanz…" nos Ajustes — a mesma
+          familia do "Tela do clie…" da ops 13 e do rotulo do checklist na
+          ops 15. Rotulo de card cortado e defeito. O card cresce, e a linha
+          inteira do grid cresce junto. */}
+      <span
+        lang={lang}
+        className="hyphens-auto w-full break-words text-center font-display text-xl leading-tight"
+      >
+        {label}
+      </span>
       {apoio && <span className="w-full truncate text-center text-sm text-ink-muted">{apoio}</span>}
       {pill}
     </motion.button>

@@ -308,6 +308,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "equipment.add": "Adicionar",
     "equipment.namePlaceholder": "Nome do equipamento…",
     "equipment.notesPlaceholder": "Notas…",
+    // Rotulo acessivel do botao "…" / "📝" do card. Nunca aparece escrito na
+    // tela — o botao mostra um caractere so —, entao o tamanho em alemao nao
+    // pesa no layout.
+    "equipment.details": "Notas e crítico",
     "equipment.status.ok": "OK",
     "equipment.status.issue": "Com problema",
     "equipment.status.broken": "Quebrado",
@@ -629,7 +633,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.openDisplay": "Dieses Gerät als Kundenbildschirm nutzen",
     "settings.system": "System",
 
-    "display.title": "Kundenanzeige",
+    "display.title": "Kunden­anzeige",
     "display.hint":
       "Öffne sunbite-pdv.vercel.app/display.html auf dem iPad. Dort erscheint ein vierstelliger Code — gib ihn hier ein.",
     "display.code": "Code vom iPad",
@@ -810,6 +814,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "equipment.add": "Hinzufügen",
     "equipment.namePlaceholder": "Name der Ausrüstung…",
     "equipment.notesPlaceholder": "Notizen…",
+    "equipment.details": "Notizen und kritisch",
     "equipment.status.ok": "OK",
     "equipment.status.issue": "Problem",
     "equipment.status.broken": "Kaputt",

@@ -19,6 +19,10 @@ import { MenuScreen } from "./components/MenuScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SaleConfirmation, type Confirmation } from "./components/SaleConfirmation";
 import { Valor } from "./components/Valor";
+// StatusPill vem do kit compartilhado; `ui.tsx` ja entra no pacote da venda
+// por HomeScreen, e nao importa ./auth nem ./supabase — a regra do topo
+// deste arquivo continua valida.
+import { StatusPill } from "./components/ui";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   AIScreen,
@@ -482,36 +486,49 @@ export default function App() {
 
   return (
     <div className={`flex h-full flex-col bg-brand ${comBarra ? BOTTOM_NAV_PAD : ""}`}>
-      <div className="flex items-center justify-between gap-2 bg-brand-dark px-3 pt-3 pb-1 text-cream/80">
+      {/* Barra de cima do PDV. Fica na tela o tempo todo em que a Romana
+          atende, com a mao molhada e sol batendo — por isso os dois botoes
+          tem 44x44 de alvo de toque (h-11 w-11) e o status e uma pilula
+          cream, que e o par de maior contraste da marca sobre brand-dark. */}
+      <div className="flex items-center gap-2 border-b-2 border-brand bg-brand-dark px-2 py-1.5 text-cream">
         <button
           onClick={() => setScreen("home")}
           aria-label={t("nav.home")}
-          className="rounded-lg px-2 py-1 text-2xl leading-none"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-2xl leading-none transition active:scale-95"
         >
           🏠
         </button>
         {/* Ocorrencia sem sair do PDV (PRD 6.4): salva e devolve na hora o
             pedido em aberto. Discreto de proposito — a mao que atende nao
-            pode esbarrar nele. */}
+            pode esbarrar nele.
+            O alvo cresceu para 44x44 para nao errar o dedo QUANDO se quer;
+            o destaque visual continua baixo (sem fundo, opacidade reduzida)
+            para nao chamar QUANDO nao se quer. Aumentar o alvo nao e
+            aumentar o destaque — essa e a mesma regra que tirou os gestos
+            laterais na Etapa 9. */}
         <button
           onClick={() => setOccurrence(true)}
           aria-label={t("pendency.short")}
-          className="rounded-lg px-2 py-1 text-lg leading-none opacity-70"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base leading-none opacity-50 transition active:opacity-90"
         >
           ＋⚠︎
         </button>
-        <div className="ml-auto flex items-center gap-3">
-          {/* Sem Supabase configurado, "pendente" não quer dizer nada — vira um
-              alarme permanente. Nesse caso o app só diz onde a venda está. */}
-          <span className="whitespace-nowrap text-[11px]">
+        {/* Sem Supabase configurado, "pendente" não quer dizer nada — vira um
+            alarme permanente. Nesse caso o app só diz onde a venda está.
+            As tres condicoes sao as mesmas de sempre; so a roupa mudou.
+            O bloco e `min-w-0` de proposito: se o texto alemao ("12 zu
+            senden") crescer, ele cede espaco e quebra linha dentro da
+            propria pilula em vez de empurrar o PT·DE para fora da tela. */}
+        <div className="ml-auto min-w-0 rounded-full bg-cream p-1 text-right leading-none">
+          <StatusPill tone={!loadConfig() ? "neutral" : pending > 0 ? "warn" : "ok"}>
             {!loadConfig()
               ? t("status.localOnly")
               : pending > 0
                 ? t("status.pending", { n: pending })
                 : t("status.synced")}
-          </span>
-          <LangToggle />
+          </StatusPill>
         </div>
+        <LangToggle className="shrink-0" />
       </div>
 
       <OrderSummary

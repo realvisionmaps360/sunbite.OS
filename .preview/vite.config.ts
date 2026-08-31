@@ -135,9 +135,13 @@ const ROWS = {
     { id: "s3", name: "Copo 300ml rPET", unit: "unidade" },
     { id: "s4", name: "Amendoa tostada", unit: "kg" },
   ],
+  // Colunas completas: o card de Fornecedores mostra produto, contato e nota,
+  // e mock com so `name` esconde exatamente o que se quer julgar. O nome longo
+  // e o pior caso de largura.
   suppliers: [
-    { id: "f1", name: "A confirmar — morango" },
-    { id: "f2", name: "Denner Aarau" },
+    { id: "f1", name: "A confirmar — morango", product: "Erdbeeren / Morangos", contact: "+41 76 583 52 22", notes: "Ainda sem contrato; comprar avulso ate fechar." },
+    { id: "f2", name: "Denner Aarau Bahnhofstrasse", product: "Schokolade, Becher", contact: "062 823 11 22", notes: null },
+    { id: "f3", name: "Migros", product: "Rahm", contact: null, notes: null },
   ],
   equipment: [
     { id: "eq1", name: "Freio da foodbike", status: "issue", critical: true, notes: "Freio fraco — problema de seguranca ativo." },
@@ -299,6 +303,11 @@ import FinanceScreen from "./components/FinanceScreen.tsx";
 import StockScreen from "./components/StockScreen.tsx";
 import AIScreen from "./components/AIScreen.tsx";
 import OperationScreen from "./components/OperationScreen.tsx";
+// Parte 3: as duas telas de bastidor que exigem sessao. Vendas e Ajustes NAO
+// entram aqui de proposito — nao pedem login, entao sao vistas no app de
+// verdade em :5173, onde Vendas ainda le as vendas reais do IndexedDB.
+import EquipmentScreen from "./components/EquipmentScreen.tsx";
+import SuppliersScreen from "./components/SuppliersScreen.tsx";
 import { LangProvider } from "./i18n.tsx";
 
 // Abre direto na tela do ?screen=, no idioma do ?lang= — o unico jeito de
@@ -306,7 +315,7 @@ import { LangProvider } from "./i18n.tsx";
 const params = new URLSearchParams(location.search);
 const lang = params.get("lang");
 if (lang === "de" || lang === "pt") localStorage.setItem("sunbite.lang", lang);
-const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen };
+const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen, equipment: EquipmentScreen, suppliers: SuppliersScreen };
 const Tela = SCREENS[params.get("screen")] ?? FinanceScreen;
 
 // ?click=N abre sozinho o N-esimo "?" da tela, para fotografar a caixinha
