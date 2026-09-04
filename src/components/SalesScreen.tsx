@@ -6,7 +6,7 @@ import { LangToggle, useLang } from "../i18n";
 import { byDay, shortDate, summarize, toppingRanking } from "../sales";
 import { syncNow } from "../sync";
 import { Valor } from "./Valor";
-import { isActive, isCorrected, type Payment, type Sale } from "../types";
+import { isActive, isCorrected, tipOf, type Payment, type Sale } from "../types";
 
 type Tab = "today" | "days" | "summary";
 
@@ -193,6 +193,13 @@ function TodayTab({
                   {isCorrected(s) && s.original_total !== undefined && (
                     <p className="text-xs tabular-nums text-ink-muted line-through">
                       {t("sale.correctedFrom", { value: money(s.original_total) })}
+                    </p>
+                  )}
+                  {/* Gorjeta ao lado do valor, nunca somada nele — o numero
+                      de cima continua sendo o que a Sunbite vendeu (ops 17). */}
+                  {tipOf(s) > 0 && (
+                    <p className="text-xs tabular-nums font-semibold text-brand">
+                      + {money(tipOf(s))} {t("review.tip").toLowerCase()}
                     </p>
                   )}
                   <p className="text-xs text-ink-muted">

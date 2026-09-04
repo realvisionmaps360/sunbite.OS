@@ -52,6 +52,26 @@ body {
   overscroll-behavior: none;
 }
 
+/*
+ * Customer Display: o documento inteiro escuro, e SO nesta pagina.
+ *
+ * O `body` do app de venda e vermelho-marca. No iPad, quando a barra do Safari
+ * se recolhe, a area visivel cresce e por um instante sobra um fio de pagina
+ * embaixo do display — e o que sobrava era esse vermelho, a "listra vermelha"
+ * que o Felipe fotografou. A raiz do display ja mede a altura de verdade (ver
+ * `Display.tsx`); isto aqui e o cinto e suspensorio: qualquer sobra fica da
+ * cor do proprio display e ninguem ve nada.
+ *
+ * A marca vem do `Display.tsx`, que poe `data-tela="display"` no `<html>` ao
+ * montar. `display.html` e `index.html` compartilham este arquivo, entao pintar
+ * `body` direto mudaria tambem o fundo da tela de venda. Seletor de atributo
+ * funciona em qualquer Safari — nada de `:has()` aqui.
+ */
+html[data-tela="display"],
+html[data-tela="display"] body {
+  background: var(--color-brand-dark);
+}
+
 button {
   font-family: inherit;
   touch-action: manipulation;

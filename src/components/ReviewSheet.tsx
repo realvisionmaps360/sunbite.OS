@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
+import { useState } from "react";
 import { money, toppingEmoji } from "../config";
 import { lerPar } from "../display/protocol";
 import { LangToggle, useLang } from "../i18n";
@@ -13,9 +14,28 @@ interface Props {
   /** Quanto o cliente deu, em dinheiro. So serve ao iPad; nao vai ao banco. */
   recebido: number | null;
   onRecebido: (v: number | null) => void;
+  /** Gorjeta desta venda, em CHF. Vai ao banco na coluna `tip` (ops 17). */
+  gorjeta: number;
+  onGorjeta: (v: number) => void;
   onConfirm: () => void;
   onBack: () => void;
 }
+
+/**
+ * Fichas de gorjeta.
+ *
+ * ⚠️ Isto **nao e uma telinha de gorjeta**. A pesquisa que motivou o desenho:
+ * na Suica quase 90% das pessoas se incomodam com sugestao de gorjeta
+ * pre-definida na maquininha, e em food truck nao ha costume firmado. A
+ * Sunbite nunca pede — nada disto aparece no iPad virado para o cliente.
+ * Estes botoes sao para a Romana **registrar o que o cliente ja decidiu
+ * deixar**, do lado de ca do balcao.
+ *
+ * Sao valores de nota/moeda suica que a mao alcanca. "Outro" cobre o resto,
+ * porque gente deixa mais do que arredondamento — foi exatamente por isso que
+ * um botao de "arredondar" nao serviria.
+ */
+const GORJETAS = [0.5, 1, 2, 5];
 
 /**
  * Notas que a mao alcanca num balcao. Nao e teclado: e um toque so, e toque
@@ -50,11 +70,16 @@ export function ReviewSheet({
   payment,
   recebido,
   onRecebido,
+  gorjeta,
+  onGorjeta,
   onConfirm,
   onBack,
 }: Props) {
   const { t } = useLang();
   const reduzir = useReducedMotion();
+  /** Campo "Outro" aberto. Fechado por padrao: teclado atrasa a fila. */
+  const [outro, setOutro] = useState("");
+  const [abrirOutro, setAbrirOutro] = useState(false);
 
   const precoCopo = getCupPrice();
   const precoTopping = getToppingPrice();
@@ -64,7 +89,18 @@ export function ReviewSheet({
   // As notas so aparecem quando ha iPad pareado E o pagamento e dinheiro.
   // Sem display, esta tela nao passa a exigir um toque que nunca exigiu.
   const comNotas = dinheiro && lerPar() !== null;
-  const troco = recebido !== null ? Math.max(0, recebido - total) : null;
+  /** Arredonda ao rappen: 0.1 + 0.2 nao pode virar troco de 0.30000000004. */
+  const rappen = (n: number) => Math.round(n * 100) / 100;
+  /**
+   * O que sobra do que o cliente deu, ANTES de decidir o que e gorjeta. E
+   * este numero que o atalho "ficou com o troco" transforma em gorjeta —
+   * calculado a parte de propósito, porque assim que a gorjeta entra o troco
+   * vai a zero e o atalho perderia o proprio valor.
+   */
+  const sobra = recebido !== null ? rappen(Math.max(0, recebido - total)) : null;
+  /** Troco de verdade: o que volta para a mao do cliente. */
+  const troco = recebido !== null ? rappen(Math.max(0, recebido - total - gorjeta)) : null;
+  const podeFicarComTroco = sobra !== null && sobra > 0 && gorjeta !== sobra;
 
   /** Entrada escalonada, curta. Longa atrasaria a venda; e ela manda aqui. */
   const entra = (i: number) =>
@@ -216,6 +252,101 @@ export function ReviewSheet({
             </div>
           </div>
         )}
+
+        {/* ── Gorjeta (ops 17) ───────────────────────────────────────────
+            Fica ABAIXO das notas e ACIMA do troco, que e a ordem em que a
+            coisa acontece no balcao: o cliente da o dinheiro, diz "pode
+            ficar", e so entao se sabe qual e o troco.
+
+            A Sunbite nunca pede gorjeta: isto e registro, nao pedido, e nada
+            disto vai para o iPad do cliente. Discreto de proposito — a linha
+            fica quase invisivel enquanto a gorjeta e zero. */}
+        <div className="pb-2.5">
+          <div className="flex items-baseline justify-between gap-2 pb-1.5">
+            <p className="text-xs uppercase tracking-wider text-ink-muted">
+              {t("review.tip")}
+            </p>
+            <p
+              className={`text-sm tabular-nums ${
+                gorjeta > 0 ? "font-bold text-brand" : "text-ink-muted/70"
+              }`}
+            >
+              {gorjeta > 0 ? money(gorjeta) : t("review.tipNone")}
+            </p>
+          </div>
+
+          {/* Atalho do caso mais comum: "pode ficar". Um toque, e o valor ja
+              esta na tela — nao precisa somar de cabeca no meio da fila. */}
+          {podeFicarComTroco && (
+            <button
+              onClick={() => onGorjeta(sobra)}
+              className="mb-1.5 min-h-[44px] w-full rounded-xl border-2 border-brand px-3 py-2 text-sm font-semibold leading-tight break-words text-brand"
+            >
+              {t("review.tipKeepChange")} · {money(sobra)}
+            </button>
+          )}
+
+          <div className="grid grid-cols-5 gap-1.5">
+            {GORJETAS.map((v) => (
+              <button
+                key={v}
+                onClick={() => onGorjeta(gorjeta === v ? 0 : v)}
+                className={`min-h-[44px] rounded-xl py-2.5 text-base font-semibold tabular-nums transition ${
+                  gorjeta === v ? "bg-brand text-cream" : "bg-cream text-brand-dark"
+                }`}
+              >
+                {v.toFixed(2).replace(/\.00$/, "")}
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                // Tocar em "Outro" com gorjeta posta e o jeito de tirar: quem
+                // errou o valor no aperto precisa de uma saida de um toque.
+                if (gorjeta > 0 && !abrirOutro) {
+                  onGorjeta(0);
+                  setOutro("");
+                  return;
+                }
+                setAbrirOutro((x) => !x);
+              }}
+              className={`min-h-[44px] rounded-xl px-1 py-2.5 text-xs font-semibold leading-tight break-words transition ${
+                abrirOutro ? "bg-brand text-cream" : "bg-cream text-brand-dark"
+              }`}
+            >
+              {gorjeta > 0 && !abrirOutro ? t("review.tipClear") : t("review.tipOther")}
+            </button>
+          </div>
+
+          {abrirOutro && (
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.05"
+              min="0"
+              autoFocus
+              value={outro}
+              onChange={(e) => {
+                setOutro(e.target.value);
+                const n = Number(e.target.value);
+                onGorjeta(Number.isFinite(n) && n > 0 ? rappen(n) : 0);
+              }}
+              placeholder="CHF"
+              className="mt-1.5 w-full rounded-xl border border-black/20 bg-cream px-3 py-2.5 text-xl tabular-nums"
+            />
+          )}
+
+          {/* Com gorjeta, o numero que a Romana confere em voz alta deixa de
+              ser o total da conta. O total do produto continua sendo o que
+              vai para o banco — este aqui e so leitura. */}
+          {gorjeta > 0 && (
+            <p className="pt-1.5 text-right text-sm text-ink-muted">
+              {t("review.received")}{" "}
+              <span className="font-bold tabular-nums text-ink">
+                {money(rappen(total + gorjeta))}
+              </span>
+            </p>
+          )}
+        </div>
 
         {/* O troco aparece no celular tambem, e GRANDE: se o iPad estiver fora
             do ar a Romana ainda tem o numero, e e o numero que mais gera

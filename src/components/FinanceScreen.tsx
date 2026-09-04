@@ -32,6 +32,12 @@ interface DailyRow {
   despesas: number;
   entradas: number;
   movimentos_caixa: number;
+  /**
+   * Gorjeta do dia (ops 17). Coluna propria na view, fora de
+   * `receita_total`: gorjeta nao e faturamento da Sunbite, e o resultado
+   * operacional aqui embaixo continua sendo faturamento menos despesa.
+   */
+  gorjetas_total: number;
 }
 
 /**
@@ -123,13 +129,13 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
       const aberta = op?.[0] as { id: string; cash_initial: number | null } | undefined;
       if (aberta) {
         const [{ data: sl }, { data: ex }] = await Promise.all([
-          supabase.from("sales").select("total,payment,cancelled").eq("operation_id", aberta.id),
+          supabase.from("sales").select("total,payment,cancelled,tip").eq("operation_id", aberta.id),
           supabase.from("expenses").select("type,value").eq("operation_id", aberta.id),
         ]);
         setCash(
           expectedCash(
             aberta,
-            (sl as { total: number; payment: string; cancelled: boolean }[]) ?? [],
+            (sl as { total: number; payment: string; cancelled: boolean; tip: number | null }[]) ?? [],
             (ex as { type: string; value: number }[]) ?? [],
           ),
         );
@@ -206,6 +212,11 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
             ) : (
               <div className="space-y-1">
                 <Linha label={t("finance.revenue")} value={money(dia.receita_total)} />
+                {/* So aparece quando houve gorjeta: linha zerada todo dia
+                    vira ruido, e esta tela ja tem numero demais. */}
+                {Number(dia.gorjetas_total) > 0 && (
+                  <Linha label={t("finance.tips")} value={money(dia.gorjetas_total)} />
+                )}
                 <Linha
                   label={t("finance.cash")}
                   value={money(dia.receita_dinheiro)}
@@ -248,6 +259,12 @@ function FinanceBody({ onClose, identity }: { onClose: () => void; identity: Ide
                   value={money(cash.movements)}
                   explain="retirada"
                 />
+                {/* Gorjeta em dinheiro: ja somada no esperado (cashbox.ts),
+                    mostrada como linha propria para o numero nao aparecer do
+                    nada. A de TWINT nao entra aqui — nao passa pela caixa. */}
+                {cash.cashTips > 0 && (
+                  <Linha label={t("close.tipsCash")} value={money(cash.cashTips)} />
+                )}
                 <div className="mt-2 border-t border-black/10 pt-2">
                   <Linha label={t("close.expected")} value={money(cash.expected)} />
                 </div>

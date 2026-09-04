@@ -111,9 +111,16 @@ export function DisplayScreen({ onClose }: { onClose: () => void }) {
                 label={t("display.unpair")}
                 variant="outline"
                 onClick={() => {
+                  // ⚠️ Aqui havia um `location.reload()` — o TERCEIRO desta
+                  // tela, e pelo mesmo motivo dos outros dois: era o jeito
+                  // curto de fazer o emissor largar o canal do par antigo.
+                  // O preco era o app inteiro reiniciar, e quem despareava
+                  // caia na Home em vez de continuar nesta tela vendo a
+                  // bolinha apagar. `apagarPar` dispara o `PAR_EVENTO`, o
+                  // `App.tsx` roda o efeito de novo, nao acha par nenhum e
+                  // fecha o canal sozinho — sem recarregar nada.
                   apagarPar();
                   setPar(null);
-                  location.reload();
                 }}
               />
             </>

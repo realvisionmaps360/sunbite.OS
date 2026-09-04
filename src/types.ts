@@ -42,7 +42,27 @@ export interface Sale {
   original_total?: number;
   correction_reason?: string;
   corrected_at?: string;
+
+  /**
+   * Gorjeta recebida nesta venda, em CHF (ops 17).
+   *
+   * **Fora do `total` de proposito.** `total` e o que a Sunbite vendeu;
+   * gorjeta e dinheiro que entra e nao e receita de produto. Somar os dois
+   * faria o preco medio por copo mentir e o Financeiro contar gorjeta como
+   * faturamento.
+   *
+   * Gorjeta em dinheiro entra na conta do caixa fisico (`cashbox.ts`); em
+   * TWINT nao, pela mesma razao que a venda em TWINT nao entra: nao passa
+   * pela caixa.
+   *
+   * Vendas gravadas antes desta coluna existir vem `undefined` — leia
+   * sempre com `?? 0`.
+   */
+  tip?: number;
 }
+
+/** Gorjeta desta venda, com o padrao para as vendas antigas. */
+export const tipOf = (s: Sale) => s.tip ?? 0;
 
 /** Venda que teve valor ou forma de pagamento corrigidos. */
 export const isCorrected = (s: Sale) => Boolean(s.corrected_at);

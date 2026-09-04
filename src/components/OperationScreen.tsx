@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ensureFreshSession, useAuth, type Identity } from "../auth";
 import { expectedCash, rappen, type CashExpectation } from "../cashbox";
 import { today } from "../db";
@@ -24,6 +24,64 @@ import LoginScreen from "./LoginScreen";
 import { OccurrenceSheet } from "./OccurrenceSheet";
 
 const PHASES: Phase[] = ["preparacao", "saida", "operacao", "encerramento"];
+
+/**
+ * Por quanto tempo o toque da Romana vence a resposta do servidor.
+ *
+ * O realtime manda `load()` reler tudo a cada mudanca no banco, e essa leitura
+ * volta segundos depois — tempo em que ela ja marcou outros tres cards. Sem
+ * esta precedencia, `setStates(st)` sobrescrevia com uma foto velha: o card
+ * desmarcava sozinho e remarcava so na resposta seguinte. Dez segundos cobrem
+ * com folga a ida e volta da fila, ate com a rede ruim da feira.
+ */
+const JANELA_TOQUE_LOCAL_MS = 10_000;
+
+/** O que a Romana acabou de tocar, e quando. Chave: `template_id`. */
+type ToqueLocal = { checked: boolean; em: number };
+
+/**
+ * Tira do mapa o que ja nao precisa vencer o servidor: o toque que passou da
+ * janela, e o toque que o servidor ja devolveu com o mesmo valor.
+ *
+ * Roda fora do `setStates` de proposito — no StrictMode o React chama o
+ * updater duas vezes, e mexer no mapa la dentro apagaria a precedencia bem na
+ * segunda passada.
+ */
+function limparToquesVencidos(toques: Map<string, ToqueLocal>, doServidor: ChecklistStateRow[]) {
+  if (toques.size === 0) return;
+  const agora = Date.now();
+  const porTemplate = new Map(doServidor.map((linha) => [linha.template_id, linha]));
+  for (const [id, toque] of toques) {
+    const expirou = agora - toque.em > JANELA_TOQUE_LOCAL_MS;
+    const servidorAlcancou = porTemplate.get(id)?.checked === toque.checked;
+    if (expirou || servidorAlcancou) toques.delete(id);
+  }
+}
+
+/**
+ * Monta a lista que vai para a tela: o que veio do servidor, com os toques
+ * ainda frescos por cima. Funcao pura — so le o mapa (ver `limparToquesVencidos`).
+ */
+function aplicarToquesLocais(
+  doServidor: ChecklistStateRow[],
+  local: ChecklistStateRow[],
+  toques: Map<string, ToqueLocal>,
+): ChecklistStateRow[] {
+  if (toques.size === 0) return doServidor;
+  const porTemplate = new Map(doServidor.map((linha) => [linha.template_id, linha]));
+  for (const [id, toque] of toques) {
+    const doBanco = porTemplate.get(id);
+    if (doBanco) {
+      porTemplate.set(id, { ...doBanco, checked: toque.checked });
+      continue;
+    }
+    // Primeira marcacao do item: a linha ainda esta na fila de escrita e o
+    // servidor nem sabe que ela existe. Fica a que o toque criou aqui.
+    const otimista = local.find((linha) => linha.template_id === id);
+    if (otimista) porTemplate.set(id, otimista);
+  }
+  return [...porTemplate.values()];
+}
 
 /**
  * Tela de Operacao (Etapa 6) — exige sessao, por isso entra no barril
@@ -83,6 +141,17 @@ function OperationBody({
   const [occurrence, setOccurrence] = useState(false);
   /** Caixa esperado (PRD 7.3) — nulo enquanto nao deu para calcular. */
   const [expected, setExpected] = useState<CashExpectation | null>(null);
+  /**
+   * Os toques dos ultimos segundos. Fica em ref, e nao em estado, porque quem
+   * le isto e o `load()` — que e um `useCallback` sem dependencias e nao pode
+   * ganhar uma que o recrie a cada toque (o realtime depende dele ser estavel).
+   */
+  const toquesRecentes = useRef<Map<string, ToqueLocal>>(new Map());
+  /**
+   * Quem rola nesta tela e este container, nao a janela: `window.scrollTo` aqui
+   * nao faria nada. Serve para abrir a fase seguinte no topo da lista.
+   */
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -110,25 +179,32 @@ function OperationBody({
           .from("checklist_state")
           .select("*")
           .eq("operation_id", current.id);
-        if (st) setStates(st as ChecklistStateRow[]);
+        if (st) {
+          // A resposta chega segundos depois do toque. O que a Romana marcou
+          // nesse meio tempo vale mais do que esta foto do servidor.
+          const doServidor = st as ChecklistStateRow[];
+          limparToquesVencidos(toquesRecentes.current, doServidor);
+          setStates((prev) => aplicarToquesLocais(doServidor, prev, toquesRecentes.current));
+        }
 
         // Caixa esperado: le o que ja existe nas duas tabelas, sem redigitar
         // nada. Venda cancelada nao entra — a mesma regra do resto do app.
         const [{ data: sl }, { data: ex }] = await Promise.all([
           supabase
             .from("sales")
-            .select("total,payment,cancelled")
+            .select("total,payment,cancelled,tip")
             .eq("operation_id", current.id),
           supabase.from("expenses").select("type,value").eq("operation_id", current.id),
         ]);
         setExpected(
           expectedCash(
             current,
-            (sl as { total: number; payment: string; cancelled: boolean }[]) ?? [],
+            (sl as { total: number; payment: string; cancelled: boolean; tip: number | null }[]) ?? [],
             (ex as { type: string; value: number }[]) ?? [],
           ),
         );
       } else {
+        toquesRecentes.current.clear();
         setStates([]);
         setExpected(null);
       }
@@ -227,6 +303,9 @@ function OperationBody({
       checked_by: identity.userId,
       checked_at: new Date().toISOString(),
     };
+    // Marca ja, e anota que este valor manda enquanto estiver fresco: a
+    // proxima leitura do realtime nao pode desmarcar o card na cara dela.
+    toquesRecentes.current.set(template.id, { checked: next.checked, em: Date.now() });
     setStates((prev) => [...prev.filter((s) => s.template_id !== template.id), next]);
     await queueWrite("checklist_state", next, "operation_id,template_id");
   }
@@ -365,6 +444,23 @@ function OperationBody({
     );
   }
 
+  /** A fase seguinte de `p` na ordem de `PHASES`, ou null na ultima. */
+  function proximaFase(p: Phase): Phase | null {
+    const i = PHASES.indexOf(p);
+    return i >= 0 && i < PHASES.length - 1 ? PHASES[i + 1] : null;
+  }
+
+  /**
+   * Avanca pelo botao do rodape da fase. Vai direto no `setVista`, sem passar
+   * por `abrirFase`: a trava de hierarquia e dos cards da grade, e aqui so
+   * faria o card tremer sem deixar a Romana seguir. Quem esta na feira decide.
+   */
+  function avancarPara(p: Phase) {
+    setVista(p);
+    // A lista da fase anterior pode ser longa; sem isto a nova abre no meio.
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+  }
+
   /**
    * Qual card ganha o anel de "continue por aqui". `phaseFor` deixou de trocar
    * a tela sozinho (era o efeito que roubava a aba) e passou a fazer so isto.
@@ -383,7 +479,7 @@ function OperationBody({
   const itensDaVista = vista ? templates.filter((tp) => tp.phase === vista) : [];
 
   return (
-    <div className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
+    <div ref={containerRef} className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("operation.title")} onClose={onClose} />
       <Aviso texto={aviso} />
 
@@ -613,12 +709,6 @@ function OperationBody({
                   })}
                 </p>
               )}
-              <button
-                onClick={() => abrirFase("encerramento")}
-                className="w-full rounded-2xl border-2 border-brand py-3 font-semibold text-brand"
-              >
-                {t("operation.goToClose")}
-              </button>
             </div>
           )}
 
@@ -660,6 +750,14 @@ function OperationBody({
                         value: money(expected.entries - expected.costs + expected.movements),
                       })}`}
                   </p>
+                  {/* Gorjeta em dinheiro esta fisicamente na caixa, entao ja
+                      entrou no esperado acima. Aparece escrita porque, sem
+                      isso, o esperado sobe e a Romana nao sabe de onde veio. */}
+                  {expected.cashTips > 0 && (
+                    <p className="text-xs text-ink-muted">
+                      {t("close.tipsCash")}: {money(expected.cashTips)}
+                    </p>
+                  )}
                   <p className="text-xs text-ink-muted">
                     {t("close.twintNote", { value: money(expected.twintSales) })}
                   </p>
@@ -695,6 +793,32 @@ function OperationBody({
               </button>
             </div>
           )}
+
+          {/* Avancar de fase. Fica no fim de tudo para nao disputar o olho com
+              "Abrir operacao" / "Fechar caixa", que continuam sendo a acao
+              principal das suas fases. Some no `encerramento` — dali nao ha
+              para onde ir. Nunca fica `disabled`: com item faltando ele so
+              muda de peso e avisa no texto, porque nada pode travar a Romana
+              no meio da feira. */}
+          {(() => {
+            const proxima = proximaFase(vista);
+            if (!proxima) return null;
+            const { feitos, total } = progresso(vista);
+            const completa = feitos === total;
+            const rotulo = t(completa ? "checklist.nextPhase" : "checklist.nextPhaseAnyway", {
+              phase: t(`operation.phase.${proxima}`),
+            });
+            return (
+              <button
+                onClick={() => avancarPara(proxima)}
+                className={`min-h-[44px] w-full rounded-2xl px-4 py-4 font-semibold leading-tight break-words ${
+                  completa ? "bg-brand text-cream" : "border-2 border-brand text-brand"
+                }`}
+              >
+                {rotulo}
+              </button>
+            );
+          })()}
         </div>
       )}
 

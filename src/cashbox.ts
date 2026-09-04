@@ -22,6 +22,10 @@ export interface CashExpectation {
   initial: number;
   cashSales: number;
   twintSales: number;
+  /** Gorjeta recebida em dinheiro. Esta na caixa, entao conta (ops 17). */
+  cashTips: number;
+  /** Gorjeta recebida por TWINT. Nao passa pela caixa; so informa. */
+  twintTips: number;
   entries: number;
   costs: number;
   movements: number;
@@ -33,7 +37,7 @@ export const rappen = (n: number) => Math.round(n * 100) / 100;
 
 export function expectedCash(
   operation: { cash_initial: number | null },
-  sales: { total: number; payment: string; cancelled: boolean }[],
+  sales: { total: number; payment: string; cancelled: boolean; tip?: number | null }[],
   expenses: { type: string; value: number }[],
 ): CashExpectation {
   const ativas = sales.filter((s) => !s.cancelled);
@@ -46,6 +50,17 @@ export function expectedCash(
   const twintSales = ativas
     .filter((s) => s.payment === "twint")
     .reduce((a, s) => a + Number(s.total), 0);
+
+  // Gorjeta (ops 17). Segue a mesma regra da venda: a de dinheiro esta
+  // fisicamente na caixa e por isso entra no esperado; a de TWINT nao passa
+  // pela caixa e fica so como informacao ao lado. Gorjeta que a Romana
+  // recebe e o app nao soma vira "sobra" no fechamento, e sobra sem
+  // explicacao e exatamente o que este calculo existe para evitar.
+  const gorjeta = (p: string) =>
+    ativas.filter((s) => s.payment === p).reduce((a, s) => a + Number(s.tip ?? 0), 0);
+  const cashTips = gorjeta("cash");
+  const twintTips = gorjeta("twint");
+
   const entries = soma(expenses.filter((e) => e.type === "entrada"));
   const costs = soma(expenses.filter((e) => e.type === "despesa"));
   const movements = soma(expenses.filter((e) => e.type === "movimento_caixa"));
@@ -54,9 +69,11 @@ export function expectedCash(
     initial,
     cashSales,
     twintSales,
+    cashTips,
+    twintTips,
     entries,
     costs,
     movements,
-    expected: initial + cashSales + entries - costs + movements,
+    expected: initial + cashSales + cashTips + entries - costs + movements,
   };
 }

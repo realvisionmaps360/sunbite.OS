@@ -45,6 +45,10 @@ function row(s: Sale) {
     cup_count: s.cup_count,
     cups: s.cups,
     total: s.total,
+    // Coluna propria, nunca somada ao total (ops 17). O grant de INSERT em
+    // `sales` e coluna a coluna: se `tip` perder o grant, este insert passa a
+    // falhar e a sincronizacao inteira para — nao e so esta coluna que some.
+    tip: s.tip ?? 0,
     payment: s.payment,
     device_id: s.device_id,
     operation_id: s.operation_id ?? null,

@@ -217,6 +217,76 @@ const CarregarBike = () => (
   </Svg>
 );
 
+const CelularesTablet = () => (
+  <Svg>
+    {/* Tablet atras e proposital: no card de ~100px, tres retangulos iguais
+        viram "tres celulares". So o contraste de tamanho separa os aparelhos. */}
+    <rect x="16" y="4" width="28" height="34" rx="3" fill={C.branco} />
+    <rect x="19" y="8" width="22" height="24" rx="1.5" fill={C.gelo} stroke="none" />
+    {/* Bateria cheia: miolo verde ate a ponta do casco, o item e "100%". */}
+    <rect x="21" y="11" width="16" height="9" rx="2" fill={C.branco} />
+    <rect x="23" y="13.5" width="12" height="4" rx="1" fill={C.verde} stroke="none" />
+    <rect x="37.5" y="14" width="2.5" height="3" rx="1" fill={C.traco} stroke="none" />
+    {/* Dois celulares na frente, desencontrados na altura para nao colarem um
+        no outro quando o card encolhe. */}
+    <rect x="3" y="14" width="13" height="28" rx="3" fill={C.branco} />
+    <path d="M3 19h13M3 38h13" />
+    <rect x="6" y="23" width="7" height="4" rx="1" fill={C.verde} stroke="none" />
+    <rect x="17" y="20" width="13" height="22" rx="3" fill={C.branco} />
+    <path d="M17 25h13M17 38h13" />
+    <rect x="20" y="29" width="7" height="4" rx="1" fill={C.verde} stroke="none" />
+  </Svg>
+);
+
+const CaboExtensao = () => (
+  <Svg>
+    {/* Macho a esquerda com os pinos saindo da moldura: e o que diferencia um
+        cabo de extensao de um simples fio no meio da tela. */}
+    <rect x="4" y="16" width="12" height="15" rx="3" fill={C.branco} />
+    <path d="M4 20H1M4 27H1" strokeWidth={2.5} stroke={C.metalEscuro} />
+    {/* Cabo enrolado: duas voltas bastam para ler como "sobra de fio". */}
+    <path d="M16 23c5 0 3-8 8-8s3 9 7 9" />
+    <path d="M16 27c6 0 4-4 9-4s3 5 6 5" stroke={C.cinza} />
+    {/* Bloco de tomadas femea, tres bocas empilhadas. */}
+    <rect x="31" y="8" width="14" height="32" rx="3" fill={C.branco} />
+    <circle cx="38" cy="15" r="3.5" fill={C.cinza} />
+    <circle cx="38" cy="24" r="3.5" fill={C.cinza} />
+    <circle cx="38" cy="33" r="3.5" fill={C.cinza} />
+  </Svg>
+);
+
+const CarregadorTablet = () => (
+  <Svg>
+    {/* O `carregador` do celular fica em pe no topo com o fio descendo. Este
+        deita a fonte na esquerda e enche a direita com o tablet — a diferenca
+        precisa aparecer na silhueta, nao no detalhe. */}
+    <rect x="3" y="18" width="14" height="14" rx="3" fill={C.branco} />
+    <path d="M3 22H0M3 28H0" strokeWidth={2.5} stroke={C.metalEscuro} />
+    <path d="M17 25c5 0 3 9 8 9" />
+    <rect x="24" y="4" width="22" height="30" rx="3" fill={C.branco} />
+    <path d="M24 9h22M24 30h22" />
+    <path d="M37 13l-4 7h5l-4 7" stroke={C.amarelo} strokeWidth={2.5} />
+  </Svg>
+);
+
+const BateriaBike = () => (
+  <Svg>
+    {/* `bateria-motor` mostra so a bateria; aqui a bike inteira entra porque o
+        item e a bike carregada, e a bateria vai no quadro para o Felipe ver de
+        relance onde procurar. */}
+    <circle cx="11" cy="33" r="8" fill={C.branco} />
+    <circle cx="37" cy="33" r="8" fill={C.branco} />
+    <circle cx="11" cy="33" r="1.5" fill={C.metalEscuro} stroke="none" />
+    <circle cx="37" cy="33" r="1.5" fill={C.metalEscuro} stroke="none" />
+    <path d="M11 33l7-13h11l-6 13M18 20h11M29 20l8 13" />
+    <path d="M29 20l4-6h5" stroke={C.metalEscuro} />
+    <path d="M18 20l-3-6h-4" stroke={C.metalEscuro} />
+    <rect x="17" y="13" width="13" height="8" rx="2" fill={C.branco} />
+    <rect x="19" y="15.5" width="8" height="3" rx="1" fill={C.verde} stroke="none" />
+    <rect x="30" y="15.5" width="2.5" height="3" rx="1" fill={C.traco} stroke="none" />
+  </Svg>
+);
+
 const Freio = () => (
   <Svg>
     <circle cx="20" cy="28" r="12" fill={C.branco} />
@@ -457,14 +527,18 @@ const DESENHOS: Record<string, () => ReactNode> = {
   autorizacao: Autorizacao,
   "barra-ferro": BarraFerro,
   bateria: Bateria,
+  "bateria-bike": BateriaBike,
   "bateria-geladeira": BateriaGeladeira,
   "bateria-motor": BateriaMotor,
+  "cabo-extensao": CaboExtensao,
   "caixa-som": CaixaSom,
   "caixa-som-bateria": CaixaSomBateria,
   "caixa-vermelha": CaixaVermelha,
   carregador: Carregador,
+  "carregador-tablet": CarregadorTablet,
   "carregar-bike": CarregarBike,
   celular: Celular,
+  "celulares-tablet": CelularesTablet,
   chantilly: Chantilly,
   chocolate: Chocolate,
   "colher-chocolate": ColherChocolate,

@@ -70,6 +70,65 @@ export function Display() {
     return () => window.clearTimeout(id);
   }, [estado]);
 
+  /* ⚠️ A altura desta tela e MEDIDA pelo navegador, nao herdada do CSS.
+     Ver o comentario grande do `return` sobre a listra vermelha: nenhuma
+     unidade de CSS que o Safari 15 entende sabe a altura VISIVEL do iPad
+     quando a barra do Safari se esconde. Quem sabe e o `visualViewport`, e
+     ele so responde se perguntarmos.
+
+     A medida vai para o `<html>` como `--altura-display`/`--largura-display`,
+     e a raiz do display se dimensiona por ela. `scroll` do `visualViewport`
+     entra na lista porque no iOS a barra sumindo chega como rolagem, nao como
+     redimensionamento — sem ele a tela so acertaria a altura no giro do
+     aparelho. `orientationchange` e o cinto para o Safari que dispara o
+     `resize` antes de a nova altura valer.
+
+     `window.visualViewport` com guarda: e recente o bastante para faltar, e
+     ai `innerHeight` ja serve. */
+  useEffect(() => {
+    const raiz = document.documentElement;
+    const medir = () => {
+      const vv = window.visualViewport;
+      raiz.style.setProperty(
+        "--altura-display",
+        `${vv ? vv.height : window.innerHeight}px`,
+      );
+      raiz.style.setProperty(
+        "--largura-display",
+        `${vv ? vv.width : window.innerWidth}px`,
+      );
+    };
+    medir();
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", medir);
+      vv.addEventListener("scroll", medir);
+    }
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    return () => {
+      if (vv) {
+        vv.removeEventListener("resize", medir);
+        vv.removeEventListener("scroll", medir);
+      }
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("orientationchange", medir);
+    };
+  }, []);
+
+  /* Cinto e suspensorio: se apesar de tudo sobrar um fio de pagina, ele tem
+     que ser INVISIVEL. O `body` do app de venda e vermelho-marca, e era
+     exatamente esse vermelho que aparecia na foto do Felipe.
+
+     A marca vai no proprio documento, e nao no CSS global: `display.html` e
+     `index.html` dividem o mesmo `index.css`, entao pintar `body` de escuro
+     la mudaria tambem o fundo da tela de venda. Com o atributo, so a pagina
+     que monta este componente fica escura (ver `index.css`). */
+  useEffect(() => {
+    document.documentElement.setAttribute("data-tela", "display");
+    return () => document.documentElement.removeAttribute("data-tela");
+  }, []);
+
   const repouso = estado.kind === "repouso";
   const twint = estado.kind === "pagamento" && estado.payment === "twint";
 
@@ -139,8 +198,30 @@ export function Display() {
        apareceu no Chrome porque no Chrome as barras nao se escondem.
 
        `fixed inset-0` prende a tela na janela inteira e nao pergunta a altura
-       para ninguem. Vale nos dois modos, com e sem a barra do Safari. */
-    <div className="fixed inset-0 flex overflow-hidden bg-brand-dark text-cream">
+       para ninguem. Vale nos dois modos, com e sem a barra do Safari.
+
+       ⚠️ **E nem `inset-0` bastou.** `position: fixed` no iOS resolve contra o
+       *layout viewport*, que pode ser MENOR que a area de fato visivel: quando
+       a barra do Safari se recolhe, o visivel cresce, o `bottom: 0` continua
+       ancorado na altura velha e a listra vermelha volta. Por isso a raiz nao
+       depende mais de `bottom`/`right` — ela e ancorada so no canto de cima a
+       esquerda e recebe a altura e a largura MEDIDAS pelo efeito la em cima
+       (`--altura-display`, `--largura-display`).
+
+       O `100%` do fallback e de proposito: se o efeito ainda nao rodou (ou o
+       JS morreu), a tela volta ao comportamento anterior em vez de sumir.
+
+       PROIBIDO aqui: `dvh`, `svh`, `@container`/`cqw`, `:has()`. O iPad de 5a
+       geracao nao passa do Safari 15, e unidade que ele nao entende invalida a
+       declaracao INTEIRA, em silencio — foi assim que o logotipo desta tela
+       virou texto de 16px. */
+    <div
+      className="fixed left-0 top-0 flex overflow-hidden bg-brand-dark text-cream"
+      style={{
+        height: "var(--altura-display, 100%)",
+        width: "var(--largura-display, 100%)",
+      }}
+    >
       {/* O video NUNCA desmonta — so muda de largura, e o que entra por cima
           dele e sempre uma camada. Remontar reiniciaria o arquivo do zero a
           cada cliente, e um video que pisca e pior que nenhum video. */}

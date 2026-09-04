@@ -173,6 +173,18 @@ export default function App() {
    * Nao entra em `Sale`, nao vai para o banco, some ao fim da venda.
    */
   const [recebido, setRecebido] = useState<number | null>(null);
+  /**
+   * Gorjeta do pedido em aberto, em CHF (ops 17).
+   *
+   * Vive aqui e nao no reducer do pedido de proposito: nao e uma linha da
+   * conta, e nao pode entrar no `total`. So e escolhida na tela Conferir, e
+   * some junto com o pedido quando a venda grava ou volta.
+   *
+   * A Sunbite **nunca pede gorjeta** — nada disto aparece na tela do cliente.
+   * Isto e so o registro do que o cliente ja decidiu deixar, para o dinheiro
+   * na caixa bater no fim do dia.
+   */
+  const [gorjeta, setGorjeta] = useState(0);
   const errorTimer = useRef<number | undefined>(undefined);
   // Marca se a ultima tentativa de sync falhou, so para saber quando logar
   // a RECUPERACAO (Etapa 5) — nao muda syncNow() nem o que ele retorna.
@@ -422,6 +434,7 @@ export default function App() {
   function choosePayment(p: Payment) {
     setPayment(p);
     setRecebido(null);
+    setGorjeta(0);
     setScreen("review");
   }
 
@@ -435,6 +448,8 @@ export default function App() {
       cup_count: order.cups.length,
       cups: order.cups,
       total: order.total,
+      // Gorjeta ao lado do total, nunca dentro dele (ops 17).
+      tip: gorjeta,
       payment,
       device_id: deviceId(),
       operation_id: await getCachedOpenOperationId(),
@@ -460,6 +475,7 @@ export default function App() {
     order.reset();
     setPayment(null);
     setRecebido(null);
+    setGorjeta(0);
     setScreen("sale");
     void refreshPending();
     void syncNow().then((r) => {
@@ -490,7 +506,13 @@ export default function App() {
           atende, com a mao molhada e sol batendo — por isso os dois botoes
           tem 44x44 de alvo de toque (h-11 w-11) e o status e uma pilula
           cream, que e o par de maior contraste da marca sobre brand-dark. */}
-      <div className="flex items-center gap-2 border-b-2 border-brand bg-brand-dark px-2 py-1.5 text-cream">
+      {/* ⚠️ Sem borda embaixo. Havia um `border-b-2 border-brand` aqui para
+          separar esta barra do resumo do pedido — as duas sao `brand-dark`.
+          No tablet do Felipe aquilo leu como uma **listra vermelha atravessada
+          no meio da tela**, e listra e o defeito que esta parte do app mais
+          repetiu. Duas areas da mesma cor nao precisam de risco entre elas: o
+          resumo ja se separa pelo espaco e pelo tamanho do numero. */}
+      <div className="flex items-center gap-2 bg-brand-dark px-2 py-1.5 text-cream">
         <button
           onClick={() => setScreen("home")}
           aria-label={t("nav.home")}
@@ -603,11 +625,14 @@ export default function App() {
           payment={payment}
           recebido={recebido}
           onRecebido={setRecebido}
+          gorjeta={gorjeta}
+          onGorjeta={setGorjeta}
           onConfirm={commitSale}
           onBack={() => {
             // Volta o pedido intacto: nada foi gravado ate aqui.
             setPayment(null);
             setRecebido(null);
+            setGorjeta(0);
             setScreen("sale");
           }}
         />
