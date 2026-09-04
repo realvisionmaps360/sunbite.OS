@@ -12,7 +12,16 @@
          barra do Safari nem o iPad dormir no meio da feira. O "standalone" so
          vale depois de adicionar a tela de inicio. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- ⚠️ `black`, NAO `black-translucent`. O Felipe apontou em 04/09 que a
+         listra vermelha do rodape aparece **so quando abre pelo icone da Tela
+         de Inicio**, e nao no Safari — o que descarta as barras do navegador e
+         aponta para esta meta. Com `black-translucent` o iOS desenha a pagina
+         por baixo do relogio e entrega uma area de layout mais curta que a
+         tela, na altura da barra de status; a sobra aparece embaixo, com o
+         fundo do `body`. Opaca, a pagina recebe exatamente a area que existe.
+         ⚠️ Esta meta e lida no momento em que o icone e criado: mudar aqui so
+         vale depois de REMOVER e ADICIONAR o icone de novo no iPad. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <!-- O nome que aparece embaixo do icone na Tela de Inicio do iPad.
          Sem isto o iOS usa o <title>, que e "Sunbite" nos dois — e no meio
          de duas telas parecidas, um rotulo igual e a receita para abrir a

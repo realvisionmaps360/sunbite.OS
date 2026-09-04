@@ -220,6 +220,28 @@ export function Display() {
       style={{
         height: "var(--altura-display, 100%)",
         width: "var(--largura-display, 100%)",
+        /**
+         * ⚠️ O piso de 100vh, e por que ele e o conserto de verdade.
+         *
+         * O Felipe apontou em 04/09 que a listra continuava — e deu o dado que
+         * faltava: **ela aparece quando abre pelo icone da Tela de Inicio, e
+         * NAO no Safari.** Isso descarta as barras do navegador (a hipotese das
+         * ops 14 e 17) e aponta para o modo app com
+         * `apple-mobile-web-app-status-bar-style: black-translucent`: o iOS
+         * empurra o conteudo para baixo do relogio e entrega uma area de
+         * layout **mais curta que a tela, na altura da barra de status** —
+         * sobrando uma faixa embaixo com o fundo do `body`.
+         *
+         * `visualViewport` mede essa area curta, entao medir sozinho nao
+         * resolvia. Em modo app **nao existem barras que se recolhem**, logo
+         * `100vh` e a tela inteira, de verdade: usar o maior dos dois cobre os
+         * dois mundos. `vh` e `max()` sao antigos o bastante para o Safari 15.
+         *
+         * O `display.html` tambem passou a pedir a barra de status OPACA, que
+         * elimina o deslocamento na origem — mas aquela meta so vale para
+         * icones **criados depois** da mudanca, e este piso vale na hora.
+         */
+        minHeight: "100vh",
       }}
     >
       {/* O video NUNCA desmonta — so muda de largura, e o que entra por cima
