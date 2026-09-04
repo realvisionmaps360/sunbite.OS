@@ -70,6 +70,13 @@ body {
 html[data-tela="display"],
 html[data-tela="display"] body {
   background: var(--color-brand-dark);
+  /* Quiosque: nada rola, nunca. Rolagem de um fio de pixel e uma das poucas
+     coisas que ainda poderiam descolar a tela da beirada de baixo, e este
+     iPad nao tem um unico caso em que rolar seja util. */
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 button {

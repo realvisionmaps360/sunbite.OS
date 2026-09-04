@@ -129,6 +129,42 @@ export function Display() {
     return () => document.documentElement.removeAttribute("data-tela");
   }, []);
 
+  /**
+   * ⚠️ MEDIDOR (ops 17d). A listra vermelha do rodape do iPad ja sobreviveu a
+   * TRES consertos meus, todos baseados em hipotese: barras do Safari se
+   * recolhendo (ops 14), area de layout encolhendo (ops 17), barra de status
+   * translucida (ops 17c). Nenhum acertou, porque o defeito **so existe no
+   * aparelho do Felipe** e eu nunca vi um numero de la.
+   *
+   * Isto resolve isso: **tres toques rapidos em qualquer lugar** abrem um
+   * painel com as medidas reais daquele iPad, e desenham uma **borda verde
+   * exatamente na beirada desta tela**. Uma foto responde a pergunta que
+   * nenhuma hipotese respondeu:
+   *
+   *   - listra ABAIXO da linha verde  → a pagina esta curta (geometria minha)
+   *   - listra ACIMA da linha verde   → alguma coisa dentro da tela pinta ali
+   *   - sem linha verde visivel       → a tela transborda e o corte e do iOS
+   *
+   * Fica no codigo de producao de proposito: e uma tela de quiosque que
+   * ninguem toca, tres toques nao acontecem por acidente, e o painel some
+   * sozinho em 90s. Custa alguns bytes e economiza uma rodada inteira.
+   */
+  const [medidor, setMedidor] = useState(false);
+  const toques = useRef<number[]>([]);
+  function contarToque() {
+    const agora = Date.now();
+    toques.current = [...toques.current, agora].filter((t) => agora - t < 1500);
+    if (toques.current.length >= 3) {
+      toques.current = [];
+      setMedidor((x) => !x);
+    }
+  }
+  useEffect(() => {
+    if (!medidor) return;
+    const id = window.setTimeout(() => setMedidor(false), 90_000);
+    return () => window.clearTimeout(id);
+  }, [medidor]);
+
   const repouso = estado.kind === "repouso";
   const twint = estado.kind === "pagamento" && estado.payment === "twint";
 
@@ -243,6 +279,13 @@ export function Display() {
          */
         minHeight: "100vh",
       }}
+      /* Segunda declaracao, deliberadamente separada: se este Safari nao
+         entender `dvh`, ele descarta SO esta linha e o `100vh` acima
+         continua valendo. Nunca por as duas na mesma declaracao. */
+      ref={(el) => {
+        if (el) el.style.setProperty("min-height", "100dvh");
+      }}
+      onClick={contarToque}
     >
       {/* O video NUNCA desmonta — so muda de largura, e o que entra por cima
           dele e sempre uma camada. Remontar reiniciaria o arquivo do zero a
@@ -313,6 +356,8 @@ export function Display() {
           <Obrigado key="obrigado" estado={estado} />
         )}
       </AnimatePresence>
+
+      {medidor && <Medidor />}
     </div>
   );
 }
@@ -1291,5 +1336,96 @@ function Obrigado({
         Bis zum nächsten Mal.
       </motion.p>
     </motion.div>
+  );
+}
+
+/**
+ * ⚠️ MEDIDOR — a ferramenta que devia ter existido tres consertos atras.
+ *
+ * A listra vermelha do rodape do iPad sobreviveu a tres correcoes minhas,
+ * todas por hipotese e todas erradas, porque o defeito **so existe no
+ * aparelho do Felipe** e eu nunca vi um numero de la. Isto troca hipotese
+ * por medida: ele da tres toques na tela, tira UMA foto, e a foto responde.
+ *
+ * O que a foto responde sem eu precisar interpretar nada:
+ *
+ *   - a **linha verde** e desenhada na beirada exata desta tela. Se a listra
+ *     vermelha ficar ABAIXO dela, a pagina esta curta e o problema e a minha
+ *     geometria. Se ficar ACIMA, alguma coisa **dentro** da tela pinta ali.
+ *     Se a linha verde nem aparecer, a tela transborda e quem corta e o iOS.
+ *   - os numeros dizem exatamente **quanto** e **de onde** vem cada altura.
+ *
+ * Amarelo sobre preto de proposito: e a combinacao que sobrevive a foto de
+ * celular tirada de lado, com reflexo.
+ */
+function Medidor() {
+  const [n, setN] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const ler = () => {
+      const vv = window.visualViewport;
+      const html = document.documentElement;
+      const raiz = document.querySelector("#root > div") as HTMLElement | null;
+      const r = raiz?.getBoundingClientRect();
+      const estilo = (el: Element | null) =>
+        el ? getComputedStyle(el).backgroundColor : "-";
+      // `env()` so responde de dentro do CSS: um elemento sonda de 0x0 le os
+      // insets sem sujar o layout.
+      const sonda = document.createElement("div");
+      sonda.style.cssText =
+        "position:fixed;top:0;left:0;width:0;height:0;padding-bottom:env(safe-area-inset-bottom);padding-top:env(safe-area-inset-top)";
+      document.body.appendChild(sonda);
+      const cs = getComputedStyle(sonda);
+      const insetBaixo = cs.paddingBottom;
+      const insetCima = cs.paddingTop;
+      sonda.remove();
+
+      setN({
+        "janela (innerH)": `${window.innerHeight}`,
+        "visualViewport H": vv ? `${Math.round(vv.height)}` : "sem vv",
+        "vv offsetTop": vv ? `${Math.round(vv.offsetTop)}` : "-",
+        "screen H": `${window.screen.height}`,
+        "screen availH": `${window.screen.availHeight}`,
+        "html clientH": `${html.clientHeight}`,
+        "html scrollH": `${html.scrollHeight}`,
+        "RAIZ altura": r ? `${Math.round(r.height)}` : "-",
+        "RAIZ topo": r ? `${Math.round(r.top)}` : "-",
+        "RAIZ base": r ? `${Math.round(r.bottom)}` : "-",
+        "SOBRA embaixo": r ? `${Math.round(window.innerHeight - r.bottom)}` : "-",
+        "safe-area baixo": insetBaixo,
+        "safe-area cima": insetCima,
+        "fundo html": estilo(html),
+        "fundo body": estilo(document.body),
+        "fundo raiz": estilo(raiz),
+        "modo app": String((navigator as { standalone?: boolean }).standalone),
+        "--altura-display": html.style.getPropertyValue("--altura-display") || "-",
+      });
+    };
+    ler();
+    const id = window.setInterval(ler, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <>
+      {/* A beirada exata desta tela, em verde. E o dado mais importante da
+          foto: diz de que lado da fronteira a listra esta. */}
+      <div className="pointer-events-none absolute inset-0 z-[60] border-4 border-[#39FF14]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[60] h-2 bg-[#39FF14]" />
+
+      <div className="pointer-events-none absolute left-4 top-4 z-[61] max-w-[62%] rounded-xl bg-black/90 p-3 font-mono text-[13px] leading-[1.35] text-[#FFD400]">
+        <p className="pb-1 text-[15px] font-bold text-[#39FF14]">
+          MEDIDOR — fotografe esta tela inteira
+        </p>
+        {Object.entries(n).map(([k, v]) => (
+          <p key={k}>
+            {k}: <span className="text-white">{v}</span>
+          </p>
+        ))}
+        <p className="pt-1 text-[11px] text-[#FFD400]/70">
+          3 toques fecham · some sozinho em 90s
+        </p>
+      </div>
+    </>
   );
 }
