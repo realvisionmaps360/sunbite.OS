@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
 import { money, toppingEmoji } from "../config";
 import { lerPar } from "../display/protocol";
@@ -77,9 +77,28 @@ export function ReviewSheet({
 }: Props) {
   const { t } = useLang();
   const reduzir = useReducedMotion();
+  /**
+   * Popup da gorjeta. Fechado quase sempre: gorjeta e excecao, nao etapa da
+   * venda, e um seletor solto no rodape disputava atencao com o troco e com
+   * o Confirmar — que sao o que a Romana le em voz alta.
+   */
+  const [popup, setPopup] = useState(false);
+  /**
+   * Valor sendo escolhido DENTRO do popup. So vira gorjeta de verdade no
+   * "Pronto": tocar numa ficha e mudar de ideia nao pode deixar rastro, pela
+   * mesma razao que escolher o pagamento nao grava a venda.
+   */
+  const [rascunho, setRascunho] = useState(0);
   /** Campo "Outro" aberto. Fechado por padrao: teclado atrasa a fila. */
   const [outro, setOutro] = useState("");
   const [abrirOutro, setAbrirOutro] = useState(false);
+
+  function abrirGorjeta() {
+    setRascunho(gorjeta);
+    setOutro(gorjeta > 0 && !GORJETAS.includes(gorjeta) ? String(gorjeta) : "");
+    setAbrirOutro(false);
+    setPopup(true);
+  }
 
   const precoCopo = getCupPrice();
   const precoTopping = getToppingPrice();
@@ -100,7 +119,6 @@ export function ReviewSheet({
   const sobra = recebido !== null ? rappen(Math.max(0, recebido - total)) : null;
   /** Troco de verdade: o que volta para a mao do cliente. */
   const troco = recebido !== null ? rappen(Math.max(0, recebido - total - gorjeta)) : null;
-  const podeFicarComTroco = sobra !== null && sobra > 0 && gorjeta !== sobra;
 
   /** Entrada escalonada, curta. Longa atrasaria a venda; e ela manda aqui. */
   const entra = (i: number) =>
@@ -254,99 +272,45 @@ export function ReviewSheet({
         )}
 
         {/* ── Gorjeta (ops 17) ───────────────────────────────────────────
+            **Um botao discreto, e o resto num popup** — decisao do Felipe em
+            04/09. A primeira versao punha as fichas soltas no rodape, e elas
+            competiam com o troco e com o Confirmar, que sao o que ele le em
+            voz alta. Gorjeta e excecao, nao etapa: na maioria das vendas ele
+            passa direto por aqui.
+
             Fica ABAIXO das notas e ACIMA do troco, que e a ordem em que a
             coisa acontece no balcao: o cliente da o dinheiro, diz "pode
             ficar", e so entao se sabe qual e o troco.
 
             A Sunbite nunca pede gorjeta: isto e registro, nao pedido, e nada
-            disto vai para o iPad do cliente. Discreto de proposito — a linha
-            fica quase invisivel enquanto a gorjeta e zero. */}
-        <div className="pb-2.5">
-          <div className="flex items-baseline justify-between gap-2 pb-1.5">
-            <p className="text-xs uppercase tracking-wider text-ink-muted">
-              {t("review.tip")}
-            </p>
-            <p
-              className={`text-sm tabular-nums ${
-                gorjeta > 0 ? "font-bold text-brand" : "text-ink-muted/70"
-              }`}
-            >
-              {gorjeta > 0 ? money(gorjeta) : t("review.tipNone")}
-            </p>
-          </div>
+            disto vai para o iPad do cliente. */}
+        <button
+          onClick={abrirGorjeta}
+          className="mb-2.5 flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-1 text-left"
+        >
+          <span className="text-xs uppercase tracking-wider text-ink-muted underline decoration-dotted underline-offset-4">
+            {t("review.tip")}
+          </span>
+          <span
+            className={`text-sm tabular-nums ${
+              gorjeta > 0 ? "font-bold text-brand" : "text-ink-muted/70"
+            }`}
+          >
+            {gorjeta > 0 ? money(gorjeta) : t("review.tipNone")}
+          </span>
+        </button>
 
-          {/* Atalho do caso mais comum: "pode ficar". Um toque, e o valor ja
-              esta na tela — nao precisa somar de cabeca no meio da fila. */}
-          {podeFicarComTroco && (
-            <button
-              onClick={() => onGorjeta(sobra)}
-              className="mb-1.5 min-h-[44px] w-full rounded-xl border-2 border-brand px-3 py-2 text-sm font-semibold leading-tight break-words text-brand"
-            >
-              {t("review.tipKeepChange")} · {money(sobra)}
-            </button>
-          )}
-
-          <div className="grid grid-cols-5 gap-1.5">
-            {GORJETAS.map((v) => (
-              <button
-                key={v}
-                onClick={() => onGorjeta(gorjeta === v ? 0 : v)}
-                className={`min-h-[44px] rounded-xl py-2.5 text-base font-semibold tabular-nums transition ${
-                  gorjeta === v ? "bg-brand text-cream" : "bg-cream text-brand-dark"
-                }`}
-              >
-                {v.toFixed(2).replace(/\.00$/, "")}
-              </button>
-            ))}
-            <button
-              onClick={() => {
-                // Tocar em "Outro" com gorjeta posta e o jeito de tirar: quem
-                // errou o valor no aperto precisa de uma saida de um toque.
-                if (gorjeta > 0 && !abrirOutro) {
-                  onGorjeta(0);
-                  setOutro("");
-                  return;
-                }
-                setAbrirOutro((x) => !x);
-              }}
-              className={`min-h-[44px] rounded-xl px-1 py-2.5 text-xs font-semibold leading-tight break-words transition ${
-                abrirOutro ? "bg-brand text-cream" : "bg-cream text-brand-dark"
-              }`}
-            >
-              {gorjeta > 0 && !abrirOutro ? t("review.tipClear") : t("review.tipOther")}
-            </button>
-          </div>
-
-          {abrirOutro && (
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.05"
-              min="0"
-              autoFocus
-              value={outro}
-              onChange={(e) => {
-                setOutro(e.target.value);
-                const n = Number(e.target.value);
-                onGorjeta(Number.isFinite(n) && n > 0 ? rappen(n) : 0);
-              }}
-              placeholder="CHF"
-              className="mt-1.5 w-full rounded-xl border border-black/20 bg-cream px-3 py-2.5 text-xl tabular-nums"
-            />
-          )}
-
-          {/* Com gorjeta, o numero que a Romana confere em voz alta deixa de
-              ser o total da conta. O total do produto continua sendo o que
-              vai para o banco — este aqui e so leitura. */}
-          {gorjeta > 0 && (
-            <p className="pt-1.5 text-right text-sm text-ink-muted">
-              {t("review.received")}{" "}
-              <span className="font-bold tabular-nums text-ink">
-                {money(rappen(total + gorjeta))}
-              </span>
-            </p>
-          )}
-        </div>
+        {/* Com gorjeta, o numero que a Romana confere em voz alta deixa de
+            ser o total da conta. O total do produto continua sendo o que vai
+            para o banco — este aqui e so leitura. */}
+        {gorjeta > 0 && (
+          <p className="-mt-1 pb-2 text-right text-sm text-ink-muted">
+            {t("review.received")}{" "}
+            <span className="font-bold tabular-nums text-ink">
+              {money(rappen(total + gorjeta))}
+            </span>
+          </p>
+        )}
 
         {/* O troco aparece no celular tambem, e GRANDE: se o iPad estiver fora
             do ar a Romana ainda tem o numero, e e o numero que mais gera
@@ -378,7 +342,141 @@ export function ReviewSheet({
           {t("review.back")}
         </button>
       </footer>
-    </motion.div>
+
+      {/* ── O popup da gorjeta ─────────────────────────────────────────────
+          Abre por cima de tudo, com o fundo escurecido. Nada aqui grava: o
+          valor so sai daqui no "Pronto", e o "Cancelar" devolve a gorjeta
+          que ja estava — mesma regra do resto do app, onde escolher nao e
+          confirmar.
+
+          `z-40` porque a propria ReviewSheet e `z-30`. */}
+      <AnimatePresence>
+        {popup && (
+          <motion.div
+            className="fixed inset-0 z-40 flex items-end justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            {/* Tocar fora fecha sem aplicar — o mesmo que Cancelar. */}
+            <button
+              aria-label={t("review.tipCancel")}
+              onClick={() => setPopup(false)}
+              className="absolute inset-0 bg-black/45"
+            />
+
+            <motion.div
+              className="relative w-full max-w-md rounded-t-3xl bg-cream-soft px-4 pt-4 pb-6 shadow-2xl"
+              initial={reduzir ? { opacity: 0 } : { y: 40 }}
+              animate={reduzir ? { opacity: 1 } : { y: 0 }}
+              exit={reduzir ? { opacity: 0 } : { y: 40 }}
+              transition={{ type: "spring", stiffness: 420, damping: 34 }}
+            >
+              <div className="flex items-baseline justify-between gap-3 pb-3">
+                <h2 className="font-display text-2xl text-ink">{t("review.tip")}</h2>
+                <span
+                  className={`font-display text-2xl tabular-nums ${
+                    rascunho > 0 ? "text-brand" : "text-ink-muted/60"
+                  }`}
+                >
+                  {rascunho > 0 ? money(rascunho) : t("review.tipNone")}
+                </span>
+              </div>
+
+              {/* Atalho do caso mais comum: "pode ficar". Um toque, e o valor
+                  ja esta na tela — nao precisa somar de cabeca na fila. */}
+              {sobra !== null && sobra > 0 && rascunho !== sobra && (
+                <button
+                  onClick={() => {
+                    setRascunho(sobra);
+                    setAbrirOutro(false);
+                  }}
+                  className="mb-2 min-h-[52px] w-full rounded-2xl border-2 border-brand px-3 py-2 font-semibold leading-tight break-words text-brand"
+                >
+                  {t("review.tipKeepChange")} · {money(sobra)}
+                </button>
+              )}
+
+              <div className="grid grid-cols-5 gap-2">
+                {GORJETAS.map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setRascunho(rascunho === v ? 0 : v);
+                      setAbrirOutro(false);
+                    }}
+                    className={`min-h-[56px] rounded-2xl text-lg font-semibold tabular-nums transition ${
+                      rascunho === v ? "bg-brand text-cream" : "bg-cream text-brand-dark"
+                    }`}
+                  >
+                    {v.toFixed(2).replace(/\.00$/, "")}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setAbrirOutro((x) => !x)}
+                  className={`min-h-[56px] rounded-2xl px-1 text-xs font-semibold leading-tight break-words transition ${
+                    abrirOutro ? "bg-brand text-cream" : "bg-cream text-brand-dark"
+                  }`}
+                >
+                  {t("review.tipOther")}
+                </button>
+              </div>
+
+              {abrirOutro && (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.05"
+                  min="0"
+                  autoFocus
+                  value={outro}
+                  onChange={(e) => {
+                    setOutro(e.target.value);
+                    const n = Number(e.target.value);
+                    setRascunho(Number.isFinite(n) && n > 0 ? rappen(n) : 0);
+                  }}
+                  placeholder="CHF"
+                  className="mt-2 w-full rounded-2xl border border-black/20 bg-cream px-3 py-3 text-2xl tabular-nums"
+                />
+              )}
+
+              {/* "Tirar" so aparece quando ha o que tirar. Sai da grade das
+                  fichas de proposito: apagar nao e escolher um valor. */}
+              {rascunho > 0 && (
+                <button
+                  onClick={() => {
+                    setRascunho(0);
+                    setOutro("");
+                    setAbrirOutro(false);
+                  }}
+                  className="mt-2 min-h-[44px] w-full text-sm text-ink-muted underline underline-offset-4"
+                >
+                  {t("review.tipClear")}
+                </button>
+              )}
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => setPopup(false)}
+                  className="min-h-[56px] flex-1 rounded-2xl border border-black/15 font-semibold text-ink-muted"
+                >
+                  {t("review.tipCancel")}
+                </button>
+                <button
+                  onClick={() => {
+                    onGorjeta(rascunho);
+                    setPopup(false);
+                  }}
+                  className="min-h-[56px] flex-[2] rounded-2xl bg-brand font-display text-2xl text-cream active:scale-[0.99] transition"
+                >
+                  {t("review.tipDone")}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>    </motion.div>
   );
 }
 

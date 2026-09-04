@@ -195,6 +195,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "review.tipKeepChange": "Ficou com o troco",
     "review.tipOther": "Outro",
     "review.tipClear": "Tirar",
+    "review.tipDone": "Pronto",
+    "review.tipCancel": "Cancelar",
     "review.received": "Recebido no total",
 
     "confirm.next": "toque para o próximo cliente",
@@ -733,6 +735,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "review.tipKeepChange": "Rest behalten",
     "review.tipOther": "Andere",
     "review.tipClear": "Weg",
+    "review.tipDone": "Fertig",
+    "review.tipCancel": "Abbrechen",
     "review.received": "Total erhalten",
 
     "confirm.next": "tippen für den nächsten Kunden",
