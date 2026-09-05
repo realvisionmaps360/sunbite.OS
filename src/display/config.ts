@@ -43,6 +43,37 @@ export const CARTAZ_REPOUSO = "/display/repouso.svg";
 export const LOGO_SUNBITE = "/display/logo.png";
 
 /**
+ * As fotos da Sunbite que revezam no repouso, DEPOIS do logotipo e ANTES dos
+ * dois QR. Ordem do Felipe, 05/09: a do nome do arquivo.
+ *
+ * ⚠️ Fica em codigo, e nao nos Ajustes do celular, de proposito. Foto e
+ * conteudo de marca, nao ajuste de feira: trocar uma no meio do mercado de
+ * Aarau nao e uma coisa que alguem queira fazer com fila no balcao, e um
+ * campo de upload no celular pediria armazenamento, permissao e uma tela
+ * inteira para resolver um problema que nao existe. Trocar, tirar ou
+ * reordenar e mexer nesta lista — uma linha por foto.
+ *
+ * ⚠️ As originais (`BUSINESS/SUNBITE.ch/fotos tablet`) somam 13 MB e sao
+ * todas EM PE. Aqui elas entram reduzidas para 1400px de altura, JPEG q78:
+ * ~1,3 MB no total, que e o que o service worker consegue guardar dentro do
+ * iPad sem travar a primeira abertura. Foto nova passa pelo mesmo aperto —
+ * nao jogar o arquivo do celular direto em `public/`.
+ *
+ * A tela e DEITADA (1024x768) e as fotos sao EM PE: `PainelFoto` mostra a
+ * foto inteira no meio com uma copia borrada dela mesma preenchendo as
+ * laterais (decisao do Felipe, 05/09). Nada e cortado.
+ */
+export const FOTOS_VITRINE: string[] = [
+  "/display/fotos/1.jpg",
+  "/display/fotos/2.jpg",
+  "/display/fotos/3.jpg",
+  "/display/fotos/4.jpg",
+  "/display/fotos/5.jpg",
+  "/display/fotos/6.jpg",
+  "/display/fotos/7.jpg",
+];
+
+/**
  * Dados da conta para o QR do TWINT com o valor dentro.
  *
  * ⚠️ **Ainda nao preenchido, e nao vou inventar.** Sem IBAN nao existe QR, e

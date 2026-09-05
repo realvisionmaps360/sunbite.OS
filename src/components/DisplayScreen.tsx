@@ -13,6 +13,7 @@ import {
   presencaDoDisplay,
   type Vitrine,
 } from "../display/protocol";
+import { FOTOS_VITRINE } from "../display/config";
 import { AdminHeader, Card, TileButton } from "./ui";
 
 /**
@@ -81,6 +82,27 @@ export function DisplayScreen({ onClose }: { onClose: () => void }) {
 
   const ativos = paineis(v);
   const voltaTotal = ativos.reduce((s, p) => s + p.segundos, 0);
+
+  /**
+   * O resumo do rodizio, ja com as fotos AGRUPADAS numa entrada so.
+   *
+   * ⚠️ Sem isto a frase sairia "Foto 5s → Foto 5s → …" sete vezes e ninguem
+   * leria ate o fim. O resumo existe para o Felipe bater o olho e saber o que
+   * o iPad vai fazer; a soma total continua vindo de `voltaTotal`, que conta
+   * cada foto de verdade.
+   */
+  const resumo = ativos
+    .reduce<string[]>((linhas, p, i) => {
+      if (p.tipo === "foto") {
+        if (ativos[i - 1]?.tipo === "foto") return linhas; // ja contadas
+        const quantas = ativos.filter((x) => x.tipo === "foto").length;
+        linhas.push(t("display.panel.fotosResumo", { n: quantas, seg: p.segundos }));
+        return linhas;
+      }
+      linhas.push(`${t(`display.panel.${p.tipo}`)} ${p.segundos}s`);
+      return linhas;
+    }, [])
+    .join(" → ");
 
   return (
     <div className="tela-sobreposta z-30 flex flex-col overflow-y-auto bg-cream-soft">
@@ -171,6 +193,21 @@ export function DisplayScreen({ onClose }: { onClose: () => void }) {
             t={t}
           />
 
+          {/* As fotos entram DEPOIS da cena e ANTES dos QR — a ordem esta em
+              `paineis()`, no protocolo, e este card so a espelha. A lista de
+              fotos NAO e editavel aqui: mora em `display/config.ts`, e o texto
+              de ajuda diz isso em vez de deixar o Felipe procurando o botao. */}
+          <Painel
+            emoji="🖼️"
+            titulo={t("display.panel.foto")}
+            explicacao={t("display.panel.fotoHint", { n: FOTOS_VITRINE.length })}
+            ligado={v.fotos}
+            onLigar={(b) => set("fotos", b)}
+            segundos={v.fotosSeg}
+            onSegundos={(n) => set("fotosSeg", n)}
+            t={t}
+          />
+
           <Painel
             emoji="📸"
             titulo={t("display.panel.instagram")}
@@ -200,12 +237,7 @@ export function DisplayScreen({ onClose }: { onClose: () => void }) {
           {/* Diz o que vai acontecer de verdade, com os numeros da tela — e
               mais util que qualquer explicacao do que "rodizio" significa. */}
           <p className="rounded-2xl bg-brand/10 p-3 text-sm text-brand">
-            {t("display.cycle", {
-              lista: ativos
-                .map((p) => `${t(`display.panel.${p.tipo}`)} ${p.segundos}s`)
-                .join(" → "),
-              total: voltaTotal,
-            })}
+            {t("display.cycle", { lista: resumo, total: voltaTotal })}
           </p>
 
           <p className="rounded-2xl bg-black/[0.04] p-3 text-sm text-ink-muted">

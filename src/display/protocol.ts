@@ -1,4 +1,7 @@
 import type { Cup, Payment } from "../types";
+// So constantes (caminhos de arquivo), nenhum import de verdade — o modulo
+// continua puro, sem `./supabase` nem `./auth` na cadeia.
+import { FOTOS_VITRINE } from "./config";
 
 /**
  * Customer Display — Etapa 10 do plano de execucao.
@@ -160,6 +163,17 @@ export interface Vitrine {
   video: boolean;
   /** Quanto tempo a cena (ou o video) fica na tela, por volta do rodizio. */
   videoSeg: number;
+  /**
+   * As fotos da Sunbite entram no rodizio, logo depois da cena.
+   *
+   * A LISTA nao esta aqui: mora em `display/config.ts` (`FOTOS_VITRINE`),
+   * porque foto e conteudo de marca e nao ajuste de feira. O que viaja pelo
+   * canal e so o liga/desliga e o tempo de cada uma — que e o que o Felipe
+   * pode querer mudar no meio do mercado.
+   */
+  fotos: boolean;
+  /** Tempo de CADA foto, nao do bloco inteiro. */
+  fotosSeg: number;
   instagram: string;
   instagramSeg: number;
   google: string;
@@ -170,6 +184,10 @@ export const VITRINE_PADRAO: Vitrine = {
   // `false` porque `VIDEO_REPOUSO` ainda e null: o padrao honesto e a cena.
   video: false,
   videoSeg: 20,
+  // 5s por foto, decisao do Felipe em 05/09. Com as 7 fotos de hoje a volta
+  // inteira fica em ~79s: cena 20 + fotos 35 + Instagram 12 + Google 12.
+  fotos: true,
+  fotosSeg: 5,
   // Os dois enderecos vieram do Felipe em 27/08. Ficam aqui como PARTIDA, e
   // nao travados: a tela de Ajustes sobrescreve, e e por ela que se troca.
   // Mesma ideia do preco em `config.ts` depois da DEC-2026-005.
@@ -261,6 +279,7 @@ export function presencaDoDisplay(): boolean {
  */
 export type PainelVitrine =
   | { tipo: "cena"; segundos: number; video: boolean }
+  | { tipo: "foto"; segundos: number; src: string }
   | { tipo: "instagram"; segundos: number; url: string }
   | { tipo: "google"; segundos: number; url: string };
 
@@ -268,6 +287,12 @@ export function paineis(v: Vitrine): PainelVitrine[] {
   const lista: PainelVitrine[] = [
     { tipo: "cena", segundos: Math.max(5, v.videoSeg), video: v.video },
   ];
+  // As fotos entram DEPOIS da cena e ANTES dos QR — a ordem que o Felipe
+  // pediu em 05/09: primeiro a marca, depois o produto, e so entao os pedidos
+  // (seguir, avaliar). Cada foto e um painel proprio, com o mesmo tempo.
+  if (v.fotos)
+    for (const src of FOTOS_VITRINE)
+      lista.push({ tipo: "foto", segundos: Math.max(3, v.fotosSeg), src });
   if (v.instagram.trim())
     lista.push({ tipo: "instagram", segundos: Math.max(5, v.instagramSeg), url: v.instagram.trim() });
   if (v.google.trim())
@@ -285,7 +310,11 @@ export function paineis(v: Vitrine): PainelVitrine[] {
  */
 export function estruturaDaVitrine(lista: PainelVitrine[]): string {
   return lista
-    .map((p) => (p.tipo === "cena" ? `cena:${p.video}` : `${p.tipo}:${p.url}`))
+    .map((p) => {
+      if (p.tipo === "cena") return `cena:${p.video}`;
+      if (p.tipo === "foto") return `foto:${p.src}`;
+      return `${p.tipo}:${p.url}`;
+    })
     .join("|");
 }
 

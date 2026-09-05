@@ -103,7 +103,13 @@ export default defineConfig({
         // video definitivo passar de ~40 MB, tirar `mp4` daqui e deixar o iPad
         // baixar uma vez no Wi-Fi de casa — precachear centenas de MB trava a
         // primeira abertura do app.
-        globPatterns: ["**/*.{js,css,html,png,svg,woff2,mp4}"],
+        //
+        // `jpg` entra pelo mesmo motivo, com as fotos da vitrine
+        // (`public/display/fotos/`): sem esta extensao aqui elas NAO ficam
+        // dentro do iPad, e o rodizio vira sete retangulos vazios na primeira
+        // feira sem rede. Sao ~1,3 MB no total, ja reduzidas — se um dia a
+        // lista crescer muito, a conversa e a mesma do mp4.
+        globPatterns: ["**/*.{js,css,html,png,jpg,svg,woff2,mp4}"],
         navigateFallback: "index.html",
         // Sem isto o service worker responde `index.html` para /display e o
         // iPad abre o PDV. O denylist e o que faz a segunda pagina continuar

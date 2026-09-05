@@ -144,6 +144,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "display.panel.cena": "Cena da Sunbite",
     "display.panel.cenaHint":
       "Morangos subindo devagar com o nome da Sunbite. Está sempre no rodízio.",
+    "display.panel.foto": "Fotos da Sunbite",
+    "display.panel.fotoHint":
+      "{n} fotos, uma de cada vez, logo depois da cena. Para trocar as fotos, fale comigo — elas ficam dentro do app.",
+    "display.panel.fotosResumo": "{n} fotos de {seg}s",
     "display.panel.instagram": "QR do Instagram",
     "display.panel.instagramHint":
       "Tela roxa com o QR do perfil. Sem endereço, o painel sai do rodízio.",
@@ -684,6 +688,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "display.panel.cena": "Sunbite-Szene",
     "display.panel.cenaHint":
       "Erdbeeren, die langsam aufsteigen, mit dem Namen Sunbite. Immer im Wechsel dabei.",
+    "display.panel.foto": "Sunbite-Fotos",
+    "display.panel.fotoHint":
+      "{n} Fotos, eines nach dem anderen, direkt nach der Szene. Zum Austauschen der Fotos melde dich bei mir — sie liegen in der App.",
+    "display.panel.fotosResumo": "{n} Fotos je {seg}s",
     "display.panel.instagram": "Instagram-QR",
     "display.panel.instagramHint":
       "Violette Tafel mit dem QR des Profils. Ohne Adresse fällt die Tafel aus dem Wechsel.",

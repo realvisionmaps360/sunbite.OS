@@ -544,16 +544,143 @@ function Rodizio({ vitrine }: { vitrine: Vitrine }) {
 
   const painel = lista[i % lista.length];
 
+  /**
+   * O painel atual TAPA a cena? (foto e QR tapam; a cena e a propria cena.)
+   *
+   * ⚠️ Isto existe por causa de um defeito que so a FOTO da tela pegou, nunca
+   * a medicao: no crossfade os dois paineis passam por opacidades
+   * intermediarias ao mesmo tempo, e o que estava por baixo — a cena vermelha
+   * com o logotipo — **aparecia atraves das duas fotos**. O resultado era um
+   * borrao com "Sunbite" e "ERDBEEREN MIT SCHOKOLADE" carimbados por cima dos
+   * morangos, a cada 5 segundos.
+   *
+   * A saida e um fundo opaco proprio do rodizio, por baixo dos paineis e
+   * **fora da troca deles**: enquanto o rodizio estiver no bloco que tapa
+   * (fotos e QR), ele fica montado e inteiro, entao a cena nunca reaparece no
+   * meio do caminho. Quando chega a vez da cena, ele sai junto com o painel e
+   * a devolve.
+   */
+  const tapaACena = !!painel && painel.tipo !== "cena";
+
   return (
-    <AnimatePresence mode="wait">
-      {/* A cena e painel de verdade agora, com turno proprio no rodizio: na vez
-          dela o que aparece e o que ja esta rodando por baixo, entao aqui e so
+    <>
+    <AnimatePresence>
+      {tapaACena && (
+        <motion.div
+          key="fundo-do-rodizio"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.6, ease: "easeInOut" }}
+          className="absolute inset-0 bg-ink"
+        />
+      )}
+    </AnimatePresence>
+
+    {/* ⚠️ SEM `mode="wait"`, e a diferenca importa.
+     *
+     * Com `wait` o painel que sai termina a saida ANTES de o proximo comecar
+     * a entrar, e no vao entre os dois aparece a cena vermelha por baixo. Com
+     * dois QR distantes um do outro isso passava despercebido; com sete fotos
+     * seguidas de 5s viraria um pisca-pisca vermelho a cada 5 segundos, que e
+     * exatamente o oposto de "uma transicao entre elas".
+     *
+     * No modo padrao os dois convivem por ~0,8s e a troca vira crossfade de
+     * verdade. Como todo painel e `absolute inset-0` e opaco, quem entra cobre
+     * quem sai sem nenhum salto de layout. O par Instagram → Google ganhou de
+     * graca. */}
+    <AnimatePresence>
+      {/* A cena e painel de verdade, com turno proprio no rodizio: na vez dela
+          o que aparece e o que ja esta rodando por baixo, entao aqui e so
           **nao cobrir**. Antes ela nunca tinha vez, e os QR (que sao
           `absolute inset-0` com fundo opaco) a escondiam para sempre. */}
-      {painel && painel.tipo !== "cena" && (
+      {painel?.tipo === "foto" && (
+        <PainelFoto key={`foto-${i}`} src={painel.src} />
+      )}
+      {painel && (painel.tipo === "instagram" || painel.tipo === "google") && (
         <PainelQR key={`${painel.tipo}-${i}`} painel={painel} />
       )}
     </AnimatePresence>
+    </>
+  );
+}
+
+/**
+ * Uma foto da Sunbite em tela cheia.
+ *
+ * ⚠️ O problema que este componente resolve: as fotos sao todas EM PE (foto de
+ * celular) e o iPad e DEITADO, 1024x768. Cortar para preencher (`object-cover`)
+ * come o ceu e a grama e, na foto da food bike, cortaria a propria bike.
+ * Deixar barra preta dos dois lados le como video mal enquadrado.
+ *
+ * A saida escolhida pelo Felipe em 05/09 e a que a TV e o Instagram usam: a
+ * foto **inteira** no meio (`object-contain`) e uma **copia dela mesma**,
+ * borrada e ampliada, preenchendo as laterais. As bordas ficam da cor da
+ * propria foto, nada e cortado, e a tela nao tem buraco.
+ *
+ * `filter: blur()` e `object-fit` existem em Safari desde muito antes do 15 —
+ * nada aqui depende de CSS que o iPad de 5a geracao nao entenda (a licao do
+ * defeito 4 da ops 14, quando `cqw` apagou o logotipo inteiro).
+ *
+ * A base e `bg-ink`, nunca o vermelho da marca: se por qualquer motivo sobrar
+ * um fio de pagina, ele tem que ser escuro e invisivel — foi vermelho que o
+ * Felipe fotografou em 28/08.
+ */
+function PainelFoto({ src }: { src: string }) {
+  const reduzir = useReducedMotion();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: reduzir ? 0.2 : 0.6, ease: "easeInOut" }}
+      className="absolute inset-0 overflow-hidden bg-ink"
+    >
+      {/* O preenchimento: a mesma foto, esticada para cobrir, borrada e um
+          pouco ampliada. A ampliacao existe porque o blur puxa a cor de fora
+          da imagem para dentro e deixaria uma moldura clara na beirada.
+          Uma aproximacao MUITO lenta acontece AQUI — tela parada num balcao le
+          como aparelho travado, e o fundo e o unico lugar onde o movimento nao
+          custa nada. */}
+      <motion.img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        initial={reduzir ? undefined : { scale: 1.1 }}
+        animate={reduzir ? undefined : { scale: 1.2 }}
+        transition={{ duration: 20, ease: "linear" }}
+        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
+        draggable={false}
+      />
+
+      {/* A foto de verdade, inteira, com a aproximacao leve que o Felipe pediu
+       * em 05/09.
+       *
+       * ⚠️ O truque esta no SENTIDO do zoom, e ele resolve um defeito medido.
+       * A primeira versao ia de 1 para 1.05: a altura do elemento saia de 768
+       * para 806px e ~19px eram comidos em cima e embaixo — corte pequeno, mas
+       * corte, e "a foto inteira, nada cortado" foi a decisao dele.
+       *
+       * Aqui a foto **cresce ATE o tamanho da tela**, nunca alem: comeca 6%
+       * menor e termina exatamente em 1. Como a escala nunca passa de 1, o
+       * `object-contain` nunca transborda e nao existe instante nenhum em que
+       * algo saia do quadro. O movimento e o mesmo; o que muda e de que lado
+       * da borda ele acontece.
+       *
+       * A duracao acompanha o tempo do painel mais a saida do crossfade (5s +
+       * 0,8s), para a foto ainda estar chegando quando a proxima entra — se
+       * terminasse antes, ficaria parada olhando o cliente. */}
+      <motion.img
+        src={src}
+        alt=""
+        initial={reduzir ? undefined : { scale: 0.94 }}
+        animate={reduzir ? undefined : { scale: 1 }}
+        transition={{ duration: 6, ease: "linear" }}
+        className="relative h-full w-full object-contain drop-shadow-[0_10px_40px_rgba(0,0,0,.45)]"
+        draggable={false}
+      />
+    </motion.div>
   );
 }
 
