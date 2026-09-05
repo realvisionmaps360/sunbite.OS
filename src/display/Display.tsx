@@ -571,7 +571,7 @@ function Rodizio({ vitrine }: { vitrine: Vitrine }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: "easeInOut" }}
+          transition={{ duration: 0.9, ease: "easeInOut" }}
           className="absolute inset-0 bg-ink"
         />
       )}
@@ -629,55 +629,98 @@ function Rodizio({ vitrine }: { vitrine: Vitrine }) {
 function PainelFoto({ src }: { src: string }) {
   const reduzir = useReducedMotion();
 
+  /**
+   * Esta foto ja preenche a tela sozinha?
+   *
+   * As fotos 2 e 3 foram giradas para a esquerda em 05/09 e ficaram 4:3 exato
+   * — a mesma proporcao do iPad. Nelas o fundo desfocado fica **inteiramente
+   * escondido atras da foto**: e trabalho pesado (desfoque sobre imagem de
+   * tela cheia) para desenhar algo que ninguem ve. Num iPad de 2017 isso nao
+   * e detalhe, e o mesmo tipo de custo que fez o Felipe dizer "fica travando".
+   *
+   * Entao a comparacao e feita com a imagem carregada, e nao com uma lista de
+   * nomes: foto nova que entrar deitada ganha o beneficio sozinha, e foto que
+   * um dia mude de tamanho nao deixa a regra mentindo.
+   */
+  const [preencheSozinha, setPreencheSozinha] = useState(false);
+
+  const fotoRef = useRef<HTMLImageElement>(null);
+
+  /* ⚠️ A medida mora num efeito, e nao num `ref`/`onLoad` solto — a primeira
+     versao fazia assim e acertava **so as vezes**: media as sete fotos numa
+     passada e so seis na seguinte. O motivo e que a foto vem do precache do
+     service worker e quase sempre chega pronta, e ai o `onLoad` nunca dispara;
+     ja no `ref`, que roda durante a montagem, a imagem as vezes ainda nao tem
+     `naturalWidth`. O efeito roda depois da montagem, quando `complete` ja e
+     confiavel, e o ouvinte cobre a primeira visita — a unica vez que a foto
+     vem pela rede. */
+  useEffect(() => {
+    const im = fotoRef.current;
+    if (!im) return;
+    const checa = () => {
+      if (!im.naturalWidth || !im.clientHeight) return;
+      const daFoto = im.naturalWidth / im.naturalHeight;
+      const daTela = im.clientWidth / im.clientHeight;
+      setPreencheSozinha(Math.abs(daFoto - daTela) < 0.02);
+    };
+    if (im.complete) checa();
+    im.addEventListener("load", checa);
+    return () => im.removeEventListener("load", checa);
+  }, [src]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: reduzir ? 0.2 : 0.6, ease: "easeInOut" }}
+      transition={{ duration: reduzir ? 0.2 : 0.9, ease: "easeInOut" }}
+      /* `translateZ(0)` poe este painel numa camada propria da placa de video.
+         E o que permite ao Safari animar a opacidade sem redesenhar a foto (e
+         o desfoque) a cada quadro — a diferenca entre uma transicao suave e um
+         corte seco no iPad do Felipe. */
+      style={{ transform: "translateZ(0)", willChange: "opacity" }}
       className="absolute inset-0 overflow-hidden bg-ink"
     >
-      {/* O preenchimento: a mesma foto, esticada para cobrir, borrada e um
-          pouco ampliada. A ampliacao existe porque o blur puxa a cor de fora
-          da imagem para dentro e deixaria uma moldura clara na beirada.
-          Uma aproximacao MUITO lenta acontece AQUI — tela parada num balcao le
-          como aparelho travado, e o fundo e o unico lugar onde o movimento nao
-          custa nada. */}
-      <motion.img
-        src={src}
-        alt=""
-        aria-hidden="true"
-        initial={reduzir ? undefined : { scale: 1.1 }}
-        animate={reduzir ? undefined : { scale: 1.2 }}
-        transition={{ duration: 20, ease: "linear" }}
-        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
-        draggable={false}
-      />
+      {/* O preenchimento das laterais: a mesma foto, esticada para cobrir,
+          borrada e ampliada (a ampliacao existe porque o desfoque puxa a cor
+          de fora da imagem para dentro e deixaria uma moldura clara na
+          beirada).
+          ⚠️ ESTATICO. Nao ha animacao nenhuma aqui — ver o comentario da foto
+          da frente. Desfoque so custa caro quando muda; parado, o Safari
+          desenha uma vez e guarda. */}
+      {!preencheSozinha && (
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          className="absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-xl"
+          draggable={false}
+        />
+      )}
 
-      {/* A foto de verdade, inteira, com a aproximacao leve que o Felipe pediu
-       * em 05/09.
+      {/* A foto de verdade, inteira e PARADA.
        *
-       * ⚠️ O truque esta no SENTIDO do zoom, e ele resolve um defeito medido.
-       * A primeira versao ia de 1 para 1.05: a altura do elemento saia de 768
-       * para 806px e ~19px eram comidos em cima e embaixo — corte pequeno, mas
-       * corte, e "a foto inteira, nada cortado" foi a decisao dele.
+       * ⚠️ O zoom saiu por ordem do Felipe em 05/09, e a razao e o aparelho:
+       * "fica travando o tablet e bem lento". Faz sentido — o iPad dele e de
+       * 5a geracao (A9, 2017), e animar a escala de uma imagem de tela cheia
+       * obriga o Safari a **re-rasterizar** a imagem a cada quadro; com o
+       * fundo desfocado em 40px por baixo, duas vezes. O aparelho engasgava, e
+       * com ele engasgado o navegador tambem **pulava a transicao**, que foi a
+       * outra queixa dele. Os dois defeitos eram o mesmo defeito.
        *
-       * Aqui a foto **cresce ATE o tamanho da tela**, nunca alem: comeca 6%
-       * menor e termina exatamente em 1. Como a escala nunca passa de 1, o
-       * `object-contain` nunca transborda e nao existe instante nenhum em que
-       * algo saia do quadro. O movimento e o mesmo; o que muda e de que lado
-       * da borda ele acontece.
+       * O que sobra e so opacidade, que a placa de video faz sozinha sem tocar
+       * na imagem. Se um dia alguem quiser movimento de novo aqui, medir NO
+       * IPAD antes — no Chrome desta maquina o zoom rodava liso.
        *
-       * A duracao acompanha o tempo do painel mais a saida do crossfade (5s +
-       * 0,8s), para a foto ainda estar chegando quando a proxima entra — se
-       * terminasse antes, ficaria parada olhando o cliente. */}
-      <motion.img
+       * A sombra (`drop-shadow`) saiu junto, pelo mesmo motivo: e um filtro
+       * sobre a imagem inteira, da mesma familia cara do desfoque. */}
+      <img
         src={src}
         alt=""
-        initial={reduzir ? undefined : { scale: 0.94 }}
-        animate={reduzir ? undefined : { scale: 1 }}
-        transition={{ duration: 6, ease: "linear" }}
-        className="relative h-full w-full object-contain drop-shadow-[0_10px_40px_rgba(0,0,0,.45)]"
+        decoding="async"
+        ref={fotoRef}
+        className="relative h-full w-full object-contain"
         draggable={false}
       />
     </motion.div>
