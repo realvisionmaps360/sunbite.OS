@@ -12,16 +12,21 @@
          barra do Safari nem o iPad dormir no meio da feira. O "standalone" so
          vale depois de adicionar a tela de inicio. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- ⚠️ `black`, NAO `black-translucent`. O Felipe apontou em 04/09 que a
-         listra vermelha do rodape aparece **so quando abre pelo icone da Tela
-         de Inicio**, e nao no Safari — o que descarta as barras do navegador e
-         aponta para esta meta. Com `black-translucent` o iOS desenha a pagina
-         por baixo do relogio e entrega uma area de layout mais curta que a
-         tela, na altura da barra de status; a sobra aparece embaixo, com o
-         fundo do `body`. Opaca, a pagina recebe exatamente a area que existe.
+    <!-- ⚠️ `black-translucent`, e a historia de por que ele voltou.
+         Em 04/09 troquei para `black` achando que a barra translucida era a
+         causa da listra vermelha do rodape. **Nao era**, e a troca criou um
+         defeito pior: opaca, o iOS RESERVA uma faixa no topo para o relogio e
+         a bateria em vez de deixar a pagina passar por baixo — e o Felipe
+         fotografou uma faixa vermelha atravessada em cima da tela do cliente.
+         Translucida, a pagina ocupa a tela inteira e o relogio fica por cima
+         do conteudo, que e o certo para quiosque.
+         O buraco que a translucida abria embaixo hoje esta tapado pelo piso de
+         altura da raiz (`min-height` em vh/dvh) — ver `Display.tsx`.
          ⚠️ Esta meta e lida no momento em que o icone e criado: mudar aqui so
-         vale depois de REMOVER e ADICIONAR o icone de novo no iPad. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+         vale depois de REMOVER e ADICIONAR o icone de novo no iPad. Foi
+         exatamente por isso que o defeito so apareceu quando ele recriou o
+         icone, uma rodada depois da mudanca. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <!-- O nome que aparece embaixo do icone na Tela de Inicio do iPad.
          Sem isto o iOS usa o <title>, que e "Sunbite" nos dois — e no meio
          de duas telas parecidas, um rotulo igual e a receita para abrir a
