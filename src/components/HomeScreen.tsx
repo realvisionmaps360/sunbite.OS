@@ -134,6 +134,18 @@ export function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) 
           largura da coluna. Duas colunas dobram o espaco de cada um, e o
           "Tempo" aparece sempre (com "—" quando nao ha operacao) para a grade
           nao mudar de forma ao abrir ou fechar a operacao. */}
+      {/* ⚠️ Este título existe porque a grade abaixo MENTIA por omissão. Os
+          números saem de `allSales()`, que é o IndexedDB DESTE aparelho — não
+          do servidor. No celular da Romana, que não é o que vende, eles dão
+          zero, e sem título a tela deixava entender que o dia inteiro deu
+          zero. Foi o que aconteceu depois da operação de 18/09.
+
+          Consertar lendo do servidor está PROIBIDO: `HomeScreen` não importa
+          `./supabase` nem `./auth`, e é essa ausência — não um `if` — que
+          garante a decisão 1 (vender nunca depende de login nem de internet).
+          Então o conserto é de rótulo, não de dado. O número do dia inteiro,
+          de qualquer aparelho, vive no Financeiro, que lê `v_finance_daily`. */}
+      <p className="px-4 pb-1 text-xs text-cream/70">{t("home.today")}</p>
       <div className="grid grid-cols-2 gap-2 px-4 pb-3">
         <Metric label={t("home.cups")} texto={String(resumo.cups)} />
         <Metric label={t("home.revenue")} chf={resumo.total} />

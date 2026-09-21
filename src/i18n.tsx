@@ -564,7 +564,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "home.opOpen": "Operação em andamento",
     "home.startOp": "Iniciar operação",
     "home.keepSelling": "Continuar vendendo",
-    "home.today": "Hoje",
+    // "Hoje" sozinho mentia: o resumo e do IndexedDB DESTE aparelho, e num
+    // segundo celular da zero. A chave existia sem ser usada em tela nenhuma.
+    "home.today": "Hoje, neste aparelho",
     "home.cups": "Copos",
     "home.revenue": "Faturamento",
     "home.cash": "Dinheiro",
@@ -1106,7 +1108,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "home.opOpen": "Betrieb läuft",
     "home.startOp": "Betrieb starten",
     "home.keepSelling": "Weiter verkaufen",
-    "home.today": "Heute",
+    "home.today": "Heute, auf diesem Gerät",
     "home.cups": "Becher",
     "home.revenue": "Umsatz",
     "home.cash": "Bargeld",
