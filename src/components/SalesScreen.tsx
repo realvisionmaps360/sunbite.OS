@@ -83,7 +83,7 @@ export function SalesScreen({
         </div>
       </header>
 
-      <nav className="flex gap-1 bg-brand px-3 pb-3">
+      <nav className="flex gap-1 bg-brand px-3 pb-2">
         {(["today", "days", "summary"] as Tab[]).map((v) => (
           <button
             key={v}
@@ -96,6 +96,19 @@ export function SalesScreen({
           </button>
         ))}
       </nav>
+
+      {/* ⚠️ Mesmo defeito que a Home tinha, e o mesmo conserto (ops 22): as tres
+          abas saem de `allSales()`, que e o IndexedDB DESTE aparelho. No celular
+          da Romana, que nao e o que vende, elas mostram zero — e sem este aviso
+          a tela deixa entender que nao houve venda nenhuma.
+
+          Ler do servidor aqui esta PROIBIDO pela mesma razao da Home: e a
+          ausencia de `./supabase` no caminho da venda — nao um `if` — que
+          garante a decisao 1. O conserto e de rotulo, nao de dado. O numero do
+          dia inteiro, de qualquer aparelho, vive no Financeiro. */}
+      <p className="break-words bg-brand px-4 pb-3 text-xs leading-tight text-cream/70">
+        {t("sales.device")}
+      </p>
 
       {tab === "today" && (
         <TodayTab

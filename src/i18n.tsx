@@ -50,6 +50,11 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "topping.marshmallow": "Marshmallow",
 
     "sales.title": "Vendas",
+    // Mesmo conserto de rotulo da `home.today`: as tres abas leem `allSales()`,
+    // que e o IndexedDB DESTE aparelho. Num segundo celular tudo da zero, e sem
+    // aviso a tela deixa entender que nao houve venda. O numero do dia inteiro,
+    // de qualquer aparelho, vive no Financeiro (`v_finance_daily`).
+    "sales.device": "Só as vendas deste aparelho",
     "sales.pure": "puro",
     "sales.empty": "Nenhuma venda registrada.",
 
@@ -605,6 +610,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "topping.marshmallow": "Marshmallow",
 
     "sales.title": "Verkäufe",
+    "sales.device": "Nur die Verkäufe auf diesem Gerät",
     "sales.pure": "pur",
     "sales.empty": "Keine Verkäufe erfasst.",
 
