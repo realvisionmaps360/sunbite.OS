@@ -212,10 +212,35 @@ const ROWS = {
       error: null,
       created_at: "2026-08-26T10:05:00Z",
       ai_suggestions: [
-        { id: "c1", message_id: "m2", target_table: "stock_movements", operation: "insert", summary: "Baixa de marshmallow (acabou o estoque)", payload: { stock_item_name: "Marshmallow", quantity_delta: -3, reason: "ajuste", notes: "Saldo zerado conforme relato de fim do dia" }, uncertain: true, status: "pending" },
-        { id: "c2", message_id: "m2", target_table: "purchases", operation: "insert", summary: "Compra de 2,5kg de chocolate na Denner por CHF 1234.50", payload: { supplier_name: "Denner Aarau", purchased_at: "2026-08-26", total: 1234.5, itens: [{ descricao: "Chocolate", quantidade: 2.5, custo_unitario: 493.8, stock_item_name: "Chocolate" }] }, uncertain: false, status: "applied" },
+        { id: "c1", message_id: "m2", target_table: "stock_movements", operation: "insert", summary: "Baixa de morango (acabou o estoque, card antigo sem unidade)", payload: { stock_item_name: "Morango", quantity_delta: -3, reason: "ajuste", notes: "Saldo zerado conforme relato de fim do dia" }, uncertain: true, status: "pending" },
+        { id: "c2", message_id: "m2", target_table: "purchases", operation: "insert", summary: "Compra de 2,5kg de chocolate na Denner por CHF 1234.50", payload: { supplier_name: "Denner Aarau", purchased_at: "2026-08-26", total: 1234.5, itens: [{ descricao: "Chocolate", quantidade: 2.5, unidade: "kg", embalagem: "5 tabletes de 500g a CHF 1234.50", custo_unitario: 493.8, stock_item_name: "Chocolate" }] }, uncertain: false, status: "applied" },
         { id: "c3", message_id: "m2", target_table: "pendencies", operation: "insert", summary: "Colher nova nao chegou", payload: { description: "Colher nova pendente de entrega", critical: false, origin: "compra" }, uncertain: false, status: "rejected" },
         { id: "c4", message_id: "m2", target_table: "equipment", operation: "insert", summary: "Freio da foodbike continua com problema", payload: { name: "Freio da foodbike", status: "issue", critical: true, notes: "Relato de fim de dia: problema persiste" }, uncertain: false, status: "pending" },
+      ],
+    },
+    // As duas voltas de 05/09/2026, que sao o defeito e o conserto lado a
+    // lado. m3 e a compra por embalagem escrita do jeito CERTO (quantidade em
+    // kg, embalagem por extenso). m4 e o card ERRADO — quantidade em pacotes
+    // com unidade "pacote" — que existe aqui de proposito, para que apertar
+    // "Aprovar" prove a trava de unidade em vez de gravar 15 kg de morango.
+    {
+      id: "m3",
+      input_text: "compramos hoje 15 pacotes de 500g de morango no migros por 4,95 cada pacote",
+      reply_text: "Anotado: 7,5 kg de Morango no Migros, CHF 74.25 no total.",
+      error: null,
+      created_at: "2026-09-05T09:00:00Z",
+      ai_suggestions: [
+        { id: "c5", message_id: "m3", target_table: "purchases", operation: "insert", summary: "Compra de 7,5 kg de Morango no Migros por CHF 1234.50", payload: { supplier_name: "Migros", purchased_at: "2026-09-05", total: 74.25, itens: [{ descricao: "Morango", quantidade: 7.5, unidade: "kg", embalagem: "15 pacotes de 500g a CHF 1234.50", custo_unitario: 9.9, stock_item_name: "Morango" }] }, uncertain: false, status: "pending" },
+      ],
+    },
+    {
+      id: "m4",
+      input_text: "comprei 15 pacotes de morango",
+      reply_text: "Quanto pesa cada pacote e quanto custou cada um? Sem o peso eu nao sei quantos kg entram no estoque.",
+      error: null,
+      created_at: "2026-09-05T09:05:00Z",
+      ai_suggestions: [
+        { id: "c6", message_id: "m4", target_table: "purchases", operation: "insert", summary: "Compra de 15 pacotes de Morango (unidade errada, para testar a trava)", payload: { supplier_name: "Migros", purchased_at: "2026-09-05", total: 74.25, itens: [{ descricao: "Morango", quantidade: 15, unidade: "pacote", custo_unitario: 4.95, stock_item_name: "Morango" }] }, uncertain: true, status: "pending" },
       ],
     },
   ],
@@ -243,6 +268,41 @@ ROWS.checklist_state = ROWS.checklist_templates
     checked_by: "u-teste",
     checked_at: "2026-08-28T08:30:00Z",
   }));
+
+/**
+ * As colunas NOT NULL sem default de producao, tabela por tabela. Mantidas
+ * curtas de proposito: so o que ja mordeu. operations.local_date e o
+ * primeiro (ops 19).
+ */
+const NOT_NULL = { operations: ["local_date"] };
+
+/**
+ * ?refuse=TABELA faz TODO upsert naquela tabela responder recusa do
+ * servidor, mesmo com a linha inteira. Existe para fotografar a faixa
+ * vermelha da ops 19 (a chave operation.saveFailed) sem editar src/ a mao:
+ * consertada a gravacao, ela nao aparece mais sozinha, e faixa de erro que
+ * ninguem olha e faixa de erro que pode estar cortada em alemao.
+ *
+ * NAO usar crase neste arquivo: o codigo do mock vive dentro de um template
+ * literal, e uma crase de comentario termina a string e derruba o servidor.
+ */
+const _refuse = new URLSearchParams(location.search).get("refuse");
+
+/**
+ * ?opstatus=planned devolve a operacao de hoje ainda nao aberta — o unico
+ * estado em que o campo do caixa inicial e o botao "Abrir operacao" aparecem.
+ * ?opstatus=ontem devolve a de um dia anterior ainda planejada, que e a
+ * armadilha que fez o domingo cair na operacao de 04/09.
+ */
+const _op = new URLSearchParams(location.search).get("opstatus");
+if (_op === "planned" || _op === "ontem") {
+  const op = ROWS.operations[0];
+  op.status = "planned";
+  op.cash_initial = null;
+  op.opened_at = null;
+  op.opened_by = null;
+  if (_op === "ontem") op.local_date = "2026-09-04";
+}
 
 const result = (table) => {
   // order() ordena de verdade: enquanto era no-op, o preview nao conseguia
@@ -289,7 +349,32 @@ const result = (table) => {
     // marcar um item do checklist estourava "q.upsert is not a function" —
     // erro que nao existe em producao. Grava na copia em memoria, para o
     // item continuar marcado se a tela recarregar os dados.
+    // ⚠️ O upsert RECUSA linha sem NOT NULL, igual ao Postgres — e nao e
+    // detalhe: upsert e um INSERT que so vira UPDATE depois de bater no
+    // conflito de id, entao o INSERT tem que satisfazer os NOT NULL ANTES,
+    // mesmo quando a linha ja existe. Enquanto o mock aceitava tudo, ele
+    // escondia o defeito que fez a operacao de 06/09 passar a feira inteira
+    // em "planned": os botoes da tela de Operacao mandavam so um pedaco da
+    // linha, sem local_date, e producao respondia 23502 em silencio.
     upsert: (row) => {
+      if (_refuse === table) {
+        return Promise.resolve({
+          data: null,
+          error: { code: "42501", message: 'new row violates row-level security policy for table "' + table + '"' },
+        });
+      }
+      const faltando = (NOT_NULL[table] ?? []).filter((col) => row?.[col] == null);
+      if (faltando.length > 0) {
+        return Promise.resolve({
+          data: null,
+          error: {
+            code: "23502",
+            message:
+              'null value in column "' + faltando[0] + '" of relation "' +
+              table + '" violates not-null constraint',
+          },
+        });
+      }
       const lista = ROWS[table] ?? (ROWS[table] = []);
       const i = lista.findIndex((r) => r.id === row.id);
       if (i >= 0) lista[i] = { ...lista[i], ...row };

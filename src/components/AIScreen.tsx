@@ -75,18 +75,35 @@ function semMarkdown(texto: string): string {
     .replace(/^[-*]\s+/gm, "• ");
 }
 
-/** Uma linha por item da compra, em vez do array cru em JSON. */
+/**
+ * Uma linha por item da compra, em vez do array cru em JSON.
+ *
+ * A quantidade vem sempre na unidade do catalogo e a unidade aparece colada
+ * nela: "3x Chantilly" nao deixava ninguem ver que aquilo ia entrar como 3 kg
+ * no estoque (foi o defeito de 05/09/2026). A embalagem, quando a IA manda,
+ * vai na linha de baixo — e o que liga o numero do banco ao que se comprou na
+ * loja.
+ */
 function ItemLines({ itens }: { itens: any[] }) {
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       {itens.map((it, i) => (
-        <p key={i} className="break-words">
-          {[
-            it?.quantidade != null ? `${it.quantidade}x` : null,
-            it?.descricao ?? it?.stock_item_name,
-            it?.custo_unitario != null ? `— CHF ${it.custo_unitario}` : null,
-          ].filter(Boolean).join(" ")}
-        </p>
+        <div key={i}>
+          <p className="break-words">
+            {[
+              it?.quantidade != null
+                ? `${it.quantidade}${it?.unidade ? ` ${it.unidade}` : ""}`
+                : null,
+              it?.descricao ?? it?.stock_item_name,
+              it?.custo_unitario != null
+                ? `— CHF ${it.custo_unitario}${it?.unidade ? `/${it.unidade}` : ""}`
+                : null,
+            ].filter(Boolean).join(" ")}
+          </p>
+          {it?.embalagem && (
+            <p className="break-words opacity-70">{fmt(it.embalagem)}</p>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -252,7 +269,9 @@ function AIBody({ onClose }: { onClose: () => void }) {
         ),
       );
     } catch (e: any) {
-      setErro(e?.message ?? String(e));
+      // A trava de unidade viaja como chave + variaveis, para a recusa sair
+      // no idioma da tela. Erro de rede continua vindo em texto cru.
+      setErro(e?.chave ? t(e.chave, e.vars) : (e?.message ?? String(e)));
     } finally {
       setBusyCard(null);
     }
@@ -322,12 +341,17 @@ function AIBody({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {erro && (
-          <Card>
-            <p className="text-sm text-red-700">{erro}</p>
-          </Card>
-        )}
       </div>
+
+      {/* O erro fica FORA da area que rola, colado na entrada. Dentro dela,
+          uma recusa de aprovar card aparecia abaixo do fim da conversa: o
+          card nao era aplicado e a tela nao dizia por que. Visto na foto de
+          05/09/2026, com a trava de unidade recusando um card. */}
+      {erro && (
+        <div className="shrink-0 border-t border-black/10 bg-red-50 px-3 py-2">
+          <p className="break-words text-sm text-red-700">{erro}</p>
+        </div>
+      )}
 
       {/* Entrada: digitar ou ditar, fixa embaixo — como chat de verdade. */}
       <div className="shrink-0 space-y-2 border-t border-black/10 bg-cream-soft p-3">

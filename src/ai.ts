@@ -122,16 +122,102 @@ async function resolveByName(
   return created.id as string;
 }
 
+/**
+ * Erro que a tela sabe traduzir. `src/ai.ts` nao importa o i18n de proposito
+ * (e modulo de dados, nao de tela), entao ele carrega a CHAVE e as variaveis,
+ * e quem mostra escolhe o idioma. O `message` em portugues continua existindo
+ * para o log — que e sempre em portugues.
+ */
+export class ErroDeUnidade extends Error {
+  // Campos declarados a parte de proposito: o atalho de declarar no
+  // construtor (`readonly chave: ...`) nao passa no `erasableSyntaxOnly`
+  // deste projeto.
+  readonly chave: "ai.unitMissing" | "ai.unitMismatch";
+  readonly vars: Record<string, string>;
+
+  constructor(
+    chave: "ai.unitMissing" | "ai.unitMismatch",
+    vars: Record<string, string>,
+  ) {
+    super(
+      chave === "ai.unitMissing"
+        ? `A IA nao disse em que unidade contou ${vars.item} (${vars.onde}); o catalogo mede em ${vars.catalogo}.`
+        : `Unidade errada: a IA mandou ${vars.dita} e ${vars.item} e medido em ${vars.catalogo} (${vars.onde}).`,
+    );
+    this.chave = chave;
+    this.vars = vars;
+    this.name = "ErroDeUnidade";
+  }
+}
+
+/**
+ * TRAVA DE UNIDADE — o portao que faltava.
+ *
+ * Em 05/09/2026 a IA propos "3 embalagens de Chantilly" e o app somou +3 kg no
+ * estoque, porque Chantilly e medido em kg e ninguem conferia em que unidade
+ * aquele 3 estava. Foram tres correcoes a mao para desfazer.
+ *
+ * Agora a IA e obrigada a dizer em que unidade contou (campo `unidade`, ver o
+ * prompt da Edge Function). Aqui a unidade e comparada com a do catalogo, e
+ * divergencia NAO e aplicada: o card volta com um recado em portugues em vez
+ * de gravar numero errado. Item que ainda nao existe e criado ja com a unidade
+ * que a IA disse, em vez do "un" cego de antes.
+ *
+ * Devolve o id do item de estoque.
+ */
+async function resolveStockItemComUnidade(
+  nome: string,
+  unidadeDaIA: unknown,
+  ondeApareceu: string,
+): Promise<string> {
+  const supabase = await getSupabase();
+  const alvo = String(nome ?? "").trim().toLowerCase();
+  const { data: todos } = await supabase.from("stock_items").select("id, name, unit");
+  const item = ((todos ?? []) as { id: string; name: string; unit: string }[]).find(
+    (r) => r.name.trim().toLowerCase() === alvo,
+  );
+
+  const dita = String(unidadeDaIA ?? "").trim().toLowerCase();
+
+  // Item novo: cria com a unidade que a IA disse. Sem unidade dita, "un" —
+  // mesmo comportamento de antes, e o Felipe corrige na tela de Estoque.
+  if (!item) return resolveByName("stock_items", nome, { unit: dita || "un" });
+
+  const doCatalogo = item.unit.trim().toLowerCase();
+  const mesma = (a: string, b: string) =>
+    a === b ||
+    (["un", "unidade", "unidades", "uni"].includes(a) &&
+      ["un", "unidade", "unidades", "uni"].includes(b));
+
+  if (!dita) {
+    throw new ErroDeUnidade("ai.unitMissing", {
+      item: item.name,
+      catalogo: item.unit,
+      onde: ondeApareceu,
+    });
+  }
+  if (!mesma(dita, doCatalogo)) {
+    throw new ErroDeUnidade("ai.unitMismatch", {
+      item: item.name,
+      catalogo: item.unit,
+      dita,
+      onde: ondeApareceu,
+    });
+  }
+  return item.id;
+}
+
 /** Grava um card na tabela real. Devolve o id da linha criada, quando ha um. */
 async function applyToTarget(s: AISuggestion, payload: Record<string, any>): Promise<string | null> {
   const supabase = await getSupabase();
 
   switch (s.target_table) {
     case "stock_movements": {
-      // unit e obrigatorio em stock_items: se o item for novo, entra como
-      // "un" e o Felipe corrige na tela de Estoque. Melhor do que travar a
-      // aprovacao por causa de uma unidade que a frase nunca disse.
-      const stockItemId = await resolveByName("stock_items", payload.stock_item_name, { unit: "un" });
+      const stockItemId = await resolveStockItemComUnidade(
+        payload.stock_item_name,
+        payload.unidade,
+        "movimento de estoque",
+      );
       const { data, error } = await supabase
         .from("stock_movements")
         .insert({
@@ -147,6 +233,25 @@ async function applyToTarget(s: AISuggestion, payload: Record<string, any>): Pro
     }
 
     case "purchases": {
+      // A conferencia de unidade vem ANTES de qualquer insert. Se um item
+      // reprovar no meio do laco, a compra ja estaria gravada pela metade e o
+      // card continuaria pendente — aprovar de novo lancaria a compra duas
+      // vezes. Resolver tudo primeiro faz o card falhar inteiro ou passar
+      // inteiro.
+      const itens = Array.isArray(payload.itens) ? payload.itens : [];
+      const resolvidos: (string | null)[] = [];
+      for (const it of itens) {
+        resolvidos.push(
+          it?.stock_item_name
+            ? await resolveStockItemComUnidade(
+                it.stock_item_name,
+                it?.unidade,
+                `item "${it.descricao ?? it.stock_item_name}"`,
+              )
+            : null,
+        );
+      }
+
       const supplierId = payload.supplier_name
         ? await resolveByName("suppliers", payload.supplier_name)
         : null;
@@ -166,16 +271,16 @@ async function applyToTarget(s: AISuggestion, payload: Record<string, any>): Pro
       // Os itens sao filhos da compra. O gatilho da Etapa 7 nao mexe em
       // estoque a partir de purchase_items — quem movimenta e o insert
       // explicito abaixo, um por item que aponte para um item de estoque.
-      const itens = Array.isArray(payload.itens) ? payload.itens : [];
-      for (const it of itens) {
-        const stockItemId = it?.stock_item_name
-          ? await resolveByName("stock_items", it.stock_item_name, { unit: "un" })
-          : null;
+      for (const [i, it] of itens.entries()) {
+        const stockItemId = resolvidos[i];
 
         await supabase.from("purchase_items").insert({
           purchase_id: purchase.id,
           stock_item_id: stockItemId,
-          description: it?.descricao ?? null,
+          // A embalagem entra na descricao porque e a unica pista de como a
+          // compra foi feita: "0,75 kg" sozinho nao lembra a ninguem que
+          // foram 3 potes de 250g quando o preco por pote for conferido.
+          description: [it?.descricao, it?.embalagem].filter(Boolean).join(" — ") || null,
           quantity: Number(it?.quantidade ?? 0),
           unit_cost: it?.custo_unitario != null ? Number(it.custo_unitario) : null,
         });

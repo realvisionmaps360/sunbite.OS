@@ -46,7 +46,15 @@ const AREA_TO_TABLE: Record<string, string> = {
 // Lista branca por tabela. Campo fora daqui e descartado em silencio — a IA
 // nao consegue escrever numa coluna que este arquivo nao autoriza.
 const ALLOWED_FIELDS: Record<string, string[]> = {
-  stock_movements: ["stock_item_name", "quantity_delta", "reason", "notes"],
+  // `unidade` nao e coluna de stock_movements: e a unidade em que a IA diz
+  // ter contado, e o app compara com a unidade do catalogo antes de aplicar.
+  // Sem isso, "3 embalagens" de um item medido em kg entrava como 3 kg —
+  // aconteceu de verdade em 05/09/2026 com o Chantilly (+3 kg em vez de
+  // 0,75 kg). Ver applyToTarget() em src/ai.ts.
+  stock_movements: [
+    "stock_item_name", "quantity_delta", "unidade", "quantity_delta_texto",
+    "reason", "notes",
+  ],
   purchases: ["supplier_name", "purchased_at", "total", "notes", "itens"],
   expenses: ["type", "category", "description", "value", "occurred_at"],
   pendencies: ["description", "critical", "origin"],
@@ -111,7 +119,7 @@ const PROPOR_TOOL = {
             campos: {
               type: "object",
               description:
-                "Campos a gravar. estoque: stock_item_name(nome exato do catalogo), quantity_delta(number, NEGATIVO para baixa/uso/perda, positivo para entrada), reason(compra|uso|ajuste|perda), notes. compra: supplier_name, purchased_at(YYYY-MM-DD), total(number), notes, itens(array de {descricao, quantidade, custo_unitario, stock_item_name}). financeiro: type(despesa|entrada|movimento_caixa), category, description, value(number), occurred_at(YYYY-MM-DD). pendencia: description, critical(boolean), origin. equipamento: name, status(ok|issue|broken|missing), critical(boolean), notes. fornecedor: name, product, contact, notes. preco: item_key(cup|topping), value(number). local: name, city, fee(number), contact, rating, notes. evento: place_name, starts_at(ISO com hora), label_en, label_de, is_public(boolean), notes.",
+                "Campos a gravar. estoque: stock_item_name(nome exato do catalogo), quantity_delta(number, NEGATIVO para baixa/uso/perda, positivo para entrada, SEMPRE na unidade do catalogo), unidade(a unidade do catalogo daquele item, copiada igual), quantity_delta_texto(como a pessoa disse, ex: '3 embalagens de 250g'), reason(compra|uso|ajuste|perda), notes. compra: supplier_name, purchased_at(YYYY-MM-DD), total(number, soma em CHF), notes, itens(array de {descricao, quantidade(SEMPRE na unidade do catalogo), unidade(a unidade do catalogo, copiada igual), embalagem(como foi comprado, com o preco de cada embalagem, ex: '15 pacotes de 500g a CHF 4,95'), custo_unitario(preco por UNIDADE DO CATALOGO, ou seja o que aquele item custou dividido pela quantidade), stock_item_name}). financeiro: type(despesa|entrada|movimento_caixa), category, description, value(number), occurred_at(YYYY-MM-DD). pendencia: description, critical(boolean), origin. equipamento: name, status(ok|issue|broken|missing), critical(boolean), notes. fornecedor: name, product, contact, notes. preco: item_key(cup|topping), value(number). local: name, city, fee(number), contact, rating, notes. evento: place_name, starts_at(ISO com hora), label_en, label_de, is_public(boolean), notes.",
             },
           },
           required: ["area", "resumo", "incerto", "campos"],
@@ -281,13 +289,43 @@ IDIOMA DA RESPOSTA:
 
 FORMATO: texto simples, lido no celular. NUNCA use markdown — nada de **negrito**, ##titulo, ou listas com - e *. Se precisar separar assuntos, use paragrafos curtos. Esta proibicao vale igual nos tres idiomas — em alemao e em ingles tambem, texto simples.
 
-Voce tem tres coisas que pode fazer, e pode combinar mais de uma na mesma pergunta:
+Voce tem QUATRO coisas que pode fazer, e pode combinar mais de uma na mesma pergunta:
 
 1. RESPONDER — se a pessoa fez uma pergunta sobre os dados da Sunbite (vendas, estoque, compras, caixa, pendencias, equipamento), USE as ferramentas de consulta antes de responder. Nunca invente numero. Se a ferramenta nao achar nada, diga isso, nao invente.
-2. PROPOR — se a pessoa contou algo que devia virar registro (comprou, acabou, quebrou, ficou pendente), chame propor_registros.
-3. As duas coisas — pode consultar, responder E propor na mesma mensagem.
+2. PERGUNTAR — se falta um dado OBRIGATORIO para gravar direito, pergunte e NAO proponha nada nesta volta. Ver "QUANDO PERGUNTAR" abaixo.
+3. PROPOR — se a pessoa contou algo que devia virar registro (comprou, acabou, quebrou, ficou pendente) E voce tem todos os dados obrigatorios, chame propor_registros.
+4. Combinar — pode consultar, responder E propor na mesma mensagem.
 
 Se a mensagem nao tiver nada acionavel nem pergunta, responda algo curto reconhecendo, sem propor nada.
+
+CONVERSA (voce recebe as mensagens anteriores):
+- As mensagens antes desta sao a MESMA conversa, com o que voce ja respondeu e os cards que ja propos. Cada card aparece marcado com [CARD ...] e o estado dele: pendente, aplicado (ja gravado no banco) ou rejeitado.
+- Frase curta que so faz sentido olhando para tras — "sim", "a das 3 embalagens", "esse card que voce salvou", "corrige", "era 250g cada" — se refere ao que veio antes. LEIA o historico e responda no contexto. NUNCA responda "essa frase esta muito curta e sem contexto" quando ha historico: o contexto esta ali.
+- Quando a pessoa completar um dado que faltava ("cada embalagem tem 250g"), REFACA a proposta inteira e correta com propor_registros, ja com o dado novo. Nao peca para ela repetir o que ja disse antes.
+- Se o card que ela quer corrigir ainda esta PENDENTE, diga em uma frase que ela deve rejeitar o card antigo e aprovar o novo que voce acabou de propor.
+- Se o card ja esta APLICADO (gravado), voce nao consegue mudar aquele registro. Proponha o CONSERTO: para estoque, um movimento de 'ajuste' com a diferenca (a diferenca, nao o valor cheio); para o resto, diga o que ela precisa corrigir na tela. Nunca proponha de novo a mesma compra inteira — isso gravaria em dobro.
+
+QUANDO PERGUNTAR EM VEZ DE PROPOR (regra dura):
+- Se falta um dado que muda o NUMERO que vai para o banco, PERGUNTE. Uma pergunta curta custa menos do que um registro errado. Nao adivinhe e nao marque so incerto=true: pergunte.
+- Faca a pergunta CURTA e ESPECIFICA, so sobre o que falta. Nunca uma lista de perguntas genericas. Se faltarem dois dados, pergunte os dois em uma frase so.
+- O que e OBRIGATORIO por area, e sem o que voce NAO propoe:
+  compra: o item, a quantidade NA UNIDADE DO CATALOGO, o preco e o fornecedor (onde comprou).
+  estoque: o item, a quantidade NA UNIDADE DO CATALOGO e o motivo.
+  financeiro: o valor, e o que foi (descricao).
+  equipamento: qual equipamento e qual estado.
+  preco: qual item (copo ou topping) e o valor.
+  evento: o local e a data.
+- Data nao se pergunta: sem data dita, e hoje.
+- Nao pergunte o que ja esta na conversa. Releia o historico antes de perguntar.
+- Depois de perguntar, quando a pessoa responder, PROPONHA — nao pergunte de novo a mesma coisa.
+
+UNIDADE — a regra que ja estragou dado de verdade:
+- Todo item do catalogo tem uma unidade (kg, unidade). A quantidade que voce manda TEM que estar NESSA unidade, e voce copia a unidade do catalogo no campo "unidade" da proposta. O app confere: unidade diferente da do catalogo NAO e aplicada.
+- Se a pessoa falar em pacote, embalagem, caixa, saco ou unidade de um item medido em kg, voce PRECISA do peso de cada pacote. Se ela nao disse, PERGUNTE. Nunca suponha o peso, e nunca mande a contagem de pacotes como se fosse kg.
+- Conta certa: "15 pacotes de 500g de morango a 4,95 cada" => quantidade 7.5, unidade "kg", embalagem "15 pacotes de 500g a CHF 4,95". Grama vira kg dividindo por 1000.
+- O preco tem DOIS lugares e nao pode se misturar: o que a pessoa disse ("4,95 cada pacote") vai por extenso em "embalagem"; "custo_unitario" e o preco por UNIDADE DO CATALOGO, que voce calcula: 15 x 4,95 = 74,25 gastos, dividido por 7,5 kg = 9.90 por kg. O app multiplica quantidade x custo_unitario para achar o subtotal, entao custo_unitario por pacote faria a conta da compra mentir.
+- Confira sempre: quantidade x custo_unitario tem que dar o que foi gasto naquele item, e a soma dos itens tem que dar o "total".
+- Item medido em unidade (Copo, Colher) nao tem essa conversao: 20 copos e quantidade 20, unidade "unidade".
 
 REGRA MAIS IMPORTANTE (nunca duplicar — o dado ja pode existir):
 - O PDV ja registra e desconta cada venda sozinho, automaticamente, pela ficha do copo (quanto morango, chocolate, copo, colher e topping cada copo vendido gasta). Isso acontece SEM voce.
@@ -310,13 +348,15 @@ CATALOGOS (na mensagem, quando relevante):
 
 Area ESTOQUE (stock_movements):
 - Use SO para o que nao passou pela venda: sobrou, foi usado, estragou, ou contagem fisica.
-- quantity_delta e NEGATIVO para baixa (acabou, usei, perdi, estragou) e POSITIVO para entrada.
+- quantity_delta e NEGATIVO para baixa (acabou, usei, perdi, estragou) e POSITIVO para entrada, SEMPRE na unidade do catalogo, com o campo "unidade" preenchido igual ao catalogo (ver "UNIDADE").
 - "acabou o X" sem numero: quantity_delta usando o saldo atual (consulte a ferramenta estoque antes, para zerar certo), reason 'ajuste', marque incerto=true.
 - reason: 'compra' (entrou por compra), 'uso' (teste, degustacao, amostra — NUNCA para copo vendido), 'perda' (estragou/caiu), 'ajuste' (contagem, correcao).
 
 Area COMPRA (purchases):
-- Use quando a frase disser que comprou algo. Inclua os itens em "itens".
-- ATENCAO ao numero: "comprei 2,5kg de chocolate por 20" — 2,5 e a quantidade (kg) e 20 e o custo TOTAL em CHF, nao o preco por kg. Quando a frase for ambigua entre preco total e preco unitario, escolha TOTAL e marque incerto=true.
+- Use quando a frase disser que comprou algo. Inclua os itens em "itens", um por produto, cada um com quantidade na unidade do catalogo, unidade e embalagem (ver "UNIDADE").
+- "total" e a soma de todos os itens da compra em CHF. Confira a conta antes de mandar.
+- Sem fornecedor dito (onde comprou), PERGUNTE — nao proponha com o fornecedor em branco.
+- ATENCAO ao numero: "comprei 2,5kg de chocolate por 20" — 2,5 e a quantidade (kg) e 20 e o custo TOTAL em CHF, nao o preco por kg. Quando a frase for ambigua entre preco total e preco unitario, PERGUNTE qual dos dois e.
 - Se citar um fornecedor que nao esta no catalogo, ponha em supplier_name mesmo assim.
 - NAO crie tambem uma proposta de ESTOQUE para os itens da compra: aprovar a compra ja movimenta o estoque sozinho.
 
@@ -405,12 +445,47 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    const messages: any[] = [
-      {
-        role: "user",
-        content: `Data de hoje: ${today}.\n\nCATALOGOS JA CADASTRADOS:\n${catalogo}\n\nMENSAGEM:\n${texto}`,
-      },
-    ];
+    // MEMORIA DA CONVERSA. Ate 05/09/2026 esta funcao recebia a frase sozinha:
+    // "sim, a das 3 embalagens" chegava aqui sem nada antes, e a IA respondia
+    // que a frase estava curta demais — com razao, porque para ela estava
+    // mesmo. O historico e lido AQUI, do banco, e nao vem do celular: assim o
+    // status dos cards e o de agora (um card aprovado depois da resposta
+    // aparece como 'aplicado'), e o cliente nao consegue forjar contexto.
+    // Sao as ultimas TURNOS_MEMORIA voltas; ai_messages e uma conversa so.
+    const TURNOS_MEMORIA = 8;
+    const { data: anteriores } = await caller
+      .from("ai_messages")
+      .select("id, input_text, reply_text, created_at, ai_suggestions(id, summary, status, target_table, payload)")
+      .order("created_at", { ascending: false })
+      .limit(TURNOS_MEMORIA);
+
+    const historico = ((anteriores || []) as any[]).slice().reverse();
+
+    const messages: any[] = [];
+    for (const h of historico) {
+      const dito = String(h.input_text || "").trim();
+      if (!dito) continue;
+      messages.push({ role: "user", content: dito });
+
+      const cards = ((h.ai_suggestions || []) as any[]).map((c) => {
+        const estado =
+          c.status === "applied" ? "APLICADO (ja gravado no banco)"
+          : c.status === "rejected" ? "rejeitado"
+          : "pendente";
+        return `[CARD ${String(c.id).slice(0, 8)} | ${c.target_table} | ${estado}] ${c.summary} :: ${JSON.stringify(c.payload)}`;
+      });
+      const resposta = [String(h.reply_text || "").trim(), ...cards]
+        .filter(Boolean)
+        .join("\n");
+      // Conteudo vazio quebra a API: a volta sem texto nem card vira um
+      // reconhecimento explicito, para a alternancia user/assistant continuar.
+      messages.push({ role: "assistant", content: resposta || "(sem resposta registrada)" });
+    }
+
+    messages.push({
+      role: "user",
+      content: `Data de hoje: ${today}.\n\nCATALOGOS JA CADASTRADOS:\n${catalogo}\n\nMENSAGEM:\n${texto}`,
+    });
 
     let replyText = "";
     let propostas: any[] = [];

@@ -258,6 +258,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "operation.loadError": "Não deu para abrir agora. Tente de novo com internet.",
     "operation.loading": "Carregando…",
     "operation.offlineNotice": "Sem internet — as ações ficam na fila e sobem sozinhas.",
+    "operation.saveFailed": "O servidor recusou. Nada foi gravado.",
     "operation.none": "Nenhuma operação em andamento.",
     "operation.start": "Iniciar operação",
     "operation.open": "Abrir operação",
@@ -476,6 +477,12 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "ai.title": "Falar com a IA",
     "ai.loadError": "Não deu para abrir agora. Tente de novo com internet.",
     "ai.needsInternet": "Precisa de internet para usar a IA.",
+    // A trava de unidade (src/ai.ts). Recusar o card e o certo — mas a tela
+    // tem que dizer por que, e no idioma de quem esta olhando.
+    "ai.unitMismatch":
+      "Não apliquei: a IA contou {item} em {dita} e o estoque mede em {catalogo}. Diga o peso de cada embalagem e peça para ela refazer.",
+    "ai.unitMissing":
+      "Não apliquei: a IA não disse em que unidade contou {item}, e o estoque mede em {catalogo}. Peça para ela refazer dizendo a unidade.",
     "ai.placeholder": "Pergunte ou conte o que aconteceu…",
     "ai.record": "Gravar",
     "ai.stopRecording": "Parar",
@@ -803,6 +810,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "operation.loading": "Lade…",
     "operation.offlineNotice":
       "Kein Internet — Aktionen bleiben in der Warteschlange und werden automatisch gesendet.",
+    "operation.saveFailed": "Der Server hat abgelehnt. Nichts wurde gespeichert.",
     "operation.none": "Kein laufender Betrieb.",
     "operation.start": "Betrieb starten",
     "operation.open": "Betrieb eröffnen",
@@ -1013,6 +1021,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     "ai.title": "KI-Eingabe",
     "ai.loadError": "Konnte jetzt nicht geöffnet werden. Mit Internet erneut versuchen.",
     "ai.needsInternet": "Internet nötig, um die KI zu nutzen.",
+    "ai.unitMismatch":
+      "Nicht übernommen: die KI hat {item} in {dita} gezählt, das Lager rechnet in {catalogo}. Sag das Gewicht pro Packung und lass es neu vorschlagen.",
+    "ai.unitMissing":
+      "Nicht übernommen: die KI hat nicht gesagt, in welcher Einheit sie {item} gezählt hat, das Lager rechnet in {catalogo}. Lass es mit Einheit neu vorschlagen.",
     "ai.placeholder": "Frag etwas oder erzähl, was passiert ist…",
     "ai.record": "Aufnehmen",
     "ai.stopRecording": "Stopp",

@@ -133,6 +133,13 @@ function OperationBody({
   const [vista, setVista] = useState<Phase | null>(null);
   /** Recado do erro suave da trava. Some sozinho; nunca bloqueia toque. */
   const [aviso, setAviso] = useState<string | null>(null);
+  /**
+   * Recusa do servidor ao gravar a operacao. Diferente do `aviso`, este NAO
+   * some sozinho: se o banco nao aceitou abrir ou fechar o dia, quem esta na
+   * barraca precisa ver isso ate resolver. Some quando a gravacao seguinte
+   * passa.
+   */
+  const [erroGravacao, setErroGravacao] = useState<string | null>(null);
   /** Qual card balanca, e quantas vezes ja balancou (a chave da animacao). */
   const [tremendo, setTremendo] = useState<{ fase: Phase; n: number } | null>(null);
   const [cashInitial, setCashInitial] = useState("");
@@ -171,7 +178,21 @@ function OperationBody({
         .neq("status", "closed")
         .order("created_at", { ascending: false })
         .limit(1);
-      const current = (op?.[0] as Operation | undefined) ?? null;
+      /**
+       * Uma operacao PLANEJADA de um dia anterior nao serve para hoje: ela
+       * ficou para tras. Foi assim que o domingo 06/09 caiu inteiro dentro da
+       * operacao criada em 04/09 — checklist, e depois as vendas — herdando a
+       * data errada. Ignorada aqui, a tela oferece comecar a de hoje.
+       *
+       * Uma operacao ABERTA continua valendo em qualquer data, de proposito:
+       * um dia que virou sem fechar tem que continuar alcancavel para poder
+       * ser fechado. Nada pode deixar a Romana sem caminho de volta.
+       */
+      const encontrada = (op?.[0] as Operation | undefined) ?? null;
+      const current =
+        encontrada && encontrada.status === "planned" && encontrada.local_date !== today()
+          ? null
+          : encontrada;
       setOperation(current);
 
       if (current) {
@@ -266,6 +287,16 @@ function OperationBody({
     return () => window.removeEventListener("online", onOnline);
   }, []);
 
+  /**
+   * O campo do caixa inicial nasce vazio a cada abertura da tela. Se o valor
+   * ja foi gravado, ele volta escrito — senao a tela mostra um campo em
+   * branco para um dia que ja tem caixa, e o proximo toque em Abrir gravaria
+   * `null` por cima.
+   */
+  useEffect(() => {
+    if (operation?.cash_initial != null) setCashInitial(String(operation.cash_initial));
+  }, [operation?.cash_initial]);
+
   /** O recado da trava some sozinho — 4s e o bastante para ler duas linhas. */
   useEffect(() => {
     if (!aviso) return;
@@ -289,7 +320,40 @@ function OperationBody({
       created_at: new Date().toISOString(),
     };
     setOperation(row);
-    await queueWrite("operations", row);
+    // Linha inteira, entao os NOT NULL estao satisfeitos — mas o resultado e
+    // conferido do mesmo jeito: comecar o dia e o passo que nao pode falhar
+    // calado.
+    const { erro } = await queueWrite("operations", row);
+    if (erro) setOperation(null);
+    setErroGravacao(erro);
+  }
+
+  /**
+   * Toda escrita em `operations` passa por aqui, por dois motivos.
+   *
+   * 1. **`local_date` vai sempre junto.** A fila grava com `upsert`, e upsert
+   *    e um INSERT que so vira UPDATE depois de bater no conflito de `id` — o
+   *    INSERT precisa satisfazer os NOT NULL da tabela ANTES disso. Sem a
+   *    data, o Postgres recusa com `23502` e nada e gravado. Foi assim que a
+   *    operacao de 06/09 passou a feira inteira em `planned`, sem caixa
+   *    inicial e sem hora, com o Felipe tendo apertado os botoes: o checklist
+   *    manda a linha inteira e passava, os botoes daqui mandavam so um pedaco
+   *    e falhavam calados. Quem criar um botao novo nesta tela usa esta
+   *    funcao, nunca `queueWrite("operations", ...)` direto.
+   * 2. **A recusa aparece na tela.** Antes ela morria no log, e o estado
+   *    otimista continuava mostrando "aberta". Aqui, servidor recusou =
+   *    a tela volta ao que o servidor tem e o erro fica escrito.
+   *
+   * Offline nao e recusa: a fila guarda, o estado otimista fica, e sobe
+   * sozinho quando a rede voltar.
+   */
+  async function salvarOperacao(patch: Partial<Operation> & { id: string }) {
+    if (!operation) return;
+    const antes = operation;
+    setOperation({ ...operation, ...patch });
+    const { erro } = await queueWrite("operations", { local_date: operation.local_date, ...patch });
+    if (erro) setOperation(antes);
+    setErroGravacao(erro);
   }
 
   async function toggleItem(template: ChecklistTemplate) {
@@ -312,22 +376,18 @@ function OperationBody({
 
   async function linkPlaceEvent(patch: { place_id?: string | null; event_id?: string | null }) {
     if (!operation) return;
-    const row = { id: operation.id, ...patch };
-    setOperation({ ...operation, ...patch });
-    await queueWrite("operations", row);
+    await salvarOperacao({ id: operation.id, ...patch });
   }
 
   async function openOperation() {
     if (!operation) return;
-    const patch = {
+    await salvarOperacao({
       id: operation.id,
-      status: "open" as const,
+      status: "open",
       opened_by: identity.userId,
       opened_at: new Date().toISOString(),
       cash_initial: cashInitial ? Number(cashInitial) : null,
-    };
-    setOperation({ ...operation, ...patch });
-    await queueWrite("operations", patch);
+    });
   }
 
   /**
@@ -347,15 +407,13 @@ function OperationBody({
 
     if (diff !== null && diff !== 0 && !closeReason.trim()) return;
 
-    const patch = {
+    await salvarOperacao({
       id: operation.id,
-      status: "closed" as const,
+      status: "closed",
       closed_by: identity.userId,
       closed_at: new Date().toISOString(),
       cash_final: contado,
-    };
-    setOperation({ ...operation, ...patch });
-    await queueWrite("operations", patch);
+    });
 
     if (diff !== null && diff !== 0) {
       try {
@@ -482,6 +540,15 @@ function OperationBody({
     <div ref={containerRef} className="tela-sobreposta z-20 flex flex-col overflow-y-auto bg-cream-soft">
       <AdminHeader title={t("operation.title")} onClose={onClose} />
       <Aviso texto={aviso} />
+
+      {/* Recusa do servidor. Fica ate a proxima gravacao passar: erro que
+          desaparece sozinho e como o defeito que trouxe esta faixa aqui. */}
+      {erroGravacao && (
+        <div className="border-b-2 border-brand-dark bg-brand-dark px-4 py-3 text-cream">
+          <p className="text-sm font-bold">{t("operation.saveFailed")}</p>
+          <p className="mt-1 break-words text-xs opacity-90">{erroGravacao}</p>
+        </div>
+      )}
 
       {!navigator.onLine && (
         <p className="bg-black/10 px-4 py-2 text-center text-sm text-brand-dark">

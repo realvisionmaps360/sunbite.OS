@@ -18,11 +18,22 @@ export type OutboxTable =
  * inteira. E isso que garante "ultima escrita vence por campo" por
  * construcao, sem relogio vetorial nem tela de resolver conflito.
  */
+/**
+ * O que a fila conseguiu dizer sobre esta escrita.
+ *
+ * `erro` e a recusa do SERVIDOR, e so ela. Estar offline nao entra aqui: a
+ * fila guardar para depois e o comportamento certo, nao uma falha, e pintar
+ * a tela de vermelho no meio da feira sem rede seria alarme falso.
+ */
+export interface ResultadoEscrita {
+  erro: string | null;
+}
+
 export async function queueWrite<T extends { id: string }>(
   table: OutboxTable,
   row: T,
   onConflict?: string,
-): Promise<void> {
+): Promise<ResultadoEscrita> {
   await enqueueOutbox({
     id: crypto.randomUUID(),
     table,
@@ -30,7 +41,7 @@ export async function queueWrite<T extends { id: string }>(
     onConflict,
     createdAt: new Date().toISOString(),
   });
-  void flushOutbox();
+  return flushOutbox();
 }
 
 let flushing = false;
@@ -41,13 +52,19 @@ let flushing = false;
  * `one_open_operation` quando a segunda sincroniza — nao derruba as outras
  * entradas. Fica visivel na aba Erros (Etapa 5): gravar antes de comemorar
  * vale tambem aqui, nunca esconder a falha atras de uma tela de merge.
+ *
+ * ⚠️ Devolve a ultima recusa do servidor em vez de engolir tudo. Ate a ops 19
+ * o unico destino de uma recusa era o log, e foi assim que o app passou uma
+ * feira inteira dizendo "operacao aberta" com o banco recusando toda gravacao
+ * (o 23502 do `local_date`). Quem chama tem que poder contar isso na tela.
  */
-export async function flushOutbox(): Promise<void> {
-  if (flushing || !navigator.onLine) return;
+export async function flushOutbox(): Promise<ResultadoEscrita> {
+  if (flushing || !navigator.onLine) return { erro: null };
   flushing = true;
+  let erro: string | null = null;
   try {
     const entries: OutboxRow[] = await allOutbox();
-    if (entries.length === 0) return;
+    if (entries.length === 0) return { erro: null };
     const supabase = await getSupabase();
     for (const entry of entries) {
       try {
@@ -57,10 +74,12 @@ export async function flushOutbox(): Promise<void> {
         if (error) throw new Error(error.message);
         await removeOutbox(entry.id);
       } catch (e) {
-        void logEvent("error", `Falha ao sincronizar ${entry.table}: ${(e as Error).message}`);
+        erro = (e as Error).message;
+        void logEvent("error", `Falha ao sincronizar ${entry.table}: ${erro}`);
       }
     }
   } finally {
     flushing = false;
   }
+  return { erro };
 }
