@@ -519,12 +519,93 @@ const NadaEsquecido = () => (
   </Svg>
 );
 
+/* Os cinco itens que entraram na preparacao em 21/09 (B1). Nenhum dos 43
+   desenhos anteriores servia. Mesmas regras de sempre: viewBox 48x48 do
+   componente Svg, so cores da paleta C, e nada de `mask`, `paint-order` ou
+   filtro — o piso e Safari 15, e atributo que o navegador nao entende some em
+   silencio (foi assim que o logotipo do iPad virou texto de 16px na ops 14). */
+
+const Headphones = () => (
+  <Svg>
+    {/* Arco por cima, conchas nas duas pontas. */}
+    <path d="M12 30V24a12 12 0 0 1 24 0v6" strokeWidth={2.5} />
+    <rect x="7" y="28" width="9" height="14" rx="4" fill={C.preto} />
+    <rect x="32" y="28" width="9" height="14" rx="4" fill={C.preto} />
+    <path d="M9.5 31.5v7M38.5 31.5v7" stroke={C.cinza} strokeWidth={1.5} />
+  </Svg>
+);
+
+/* O uniforme e UM item so — decisao do Felipe em 21/09. Entao o desenho tem que
+   mostrar as DUAS pecas, senao o card nao lembra o chapeu.
+   ⚠️ A primeira versao punha o chapeu de lado, apoiado no ombro da camiseta, e
+   na foto a 100px (o tamanho real do card) ele nao se lia — virou um borrao no
+   canto. Empilhado e grande, le. Card de 100px nao aceita detalhe pequeno. */
+const Uniforme = () => (
+  <Svg>
+    {/* Chapeu, em cima. */}
+    <path d="M13 14a11 7 0 0 1 22 0z" fill={C.morango} />
+    <path d="M34 14h8a1.7 1.7 0 0 1 0 3.2h-9z" fill={C.morango} />
+    <path d="M14.5 12.6h19" stroke={C.creme} strokeWidth={1.4} />
+    {/* Camiseta, embaixo. */}
+    <path
+      d="M18 16l-7 4 3 7 3-1.5V44h14V25.5l3 1.5 3-7-7-4-3 2.5h-6z"
+      fill={C.morango}
+    />
+    <path d="M18 16h4a2 2 0 0 0 4 0h4" stroke={C.creme} strokeWidth={1.5} />
+    {/* O morango da marca, no peito. */}
+    <circle cx="24" cy="34" r="4.2" fill={C.creme} stroke="none" />
+    <path d="M24 32c-2 0-3 1.3-3 2.9 0 1.9 1.4 3.3 3 3.3s3-1.4 3-3.3c0-1.6-1-2.9-3-2.9z" fill={C.morango} stroke="none" />
+    <path d="M24 32v-1.7" stroke={C.folha} strokeWidth={1.2} />
+    <path d="M22.3 30.8c1.1.9 2.3.9 3.4 0" stroke={C.folha} strokeWidth={1.2} />
+  </Svg>
+);
+
+const Facas = () => (
+  <Svg>
+    {/* Duas, cruzadas — o item e "2 facas", e uma so nao diz isso. */}
+    <path d="M13 8l10 20-4 2L11 12z" fill={C.metal} />
+    <path d="M19 30l4 8-4 2-4-8z" fill={C.preto} />
+    <path d="M35 8L25 28l4 2 8-18z" fill={C.metal} />
+    <path d="M29 30l-4 8 4 2 4-8z" fill={C.preto} />
+    <path d="M13 8l10 20" stroke={C.metalEscuro} strokeWidth={1.2} />
+    <path d="M35 8L25 28" stroke={C.metalEscuro} strokeWidth={1.2} />
+  </Svg>
+);
+
+const Tabua = () => (
+  <Svg>
+    <path d="M9 14h22a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H9z" fill={C.chocoClaro} />
+    <path d="M9 21h26M9 28h26" stroke={C.choco} strokeWidth={1.2} />
+    {/* Cabo com o buraco de pendurar. */}
+    <rect x="35" y="22" width="7" height="8" rx="3" fill={C.choco} />
+    <circle cx="38.5" cy="26" r="1.6" fill={C.creme} stroke="none" />
+  </Svg>
+);
+
+/* Balanca de medicao: e para pesar o morango por copo, entao o prato tem um
+   morango em cima e o visor mostra numero. */
+const Balanca = () => (
+  <Svg>
+    <path d="M8 34h32a3 3 0 0 1 3 3v3H5v-3a3 3 0 0 1 3-3z" fill={C.cinza} />
+    <rect x="10" y="26" width="28" height="8" rx="2" fill={C.metal} />
+    {/* Visor. */}
+    <rect x="17" y="28" width="14" height="4.5" rx="1" fill={C.preto} />
+    <path d="M20 30.2h8" stroke={C.verde} strokeWidth={1.4} />
+    {/* Prato e o morango sendo pesado. */}
+    <path d="M12 26h24" stroke={C.metalEscuro} strokeWidth={2.5} />
+    <path d="M24 22c-3.2 0-5.5-2.4-5.5-5.6 0-2.4 2.3-4.4 5.5-4.4s5.5 2 5.5 4.4c0 3.2-2.3 5.6-5.5 5.6z" fill={C.morango} />
+    <path d="M24 12V8" stroke={C.folha} strokeWidth={1.5} />
+    <path d="M21 10c1.8 1.6 4.2 1.6 6 0" stroke={C.folha} strokeWidth={1.5} />
+  </Svg>
+);
+
 /* ------------------------------------------------------------------ */
 /* O registro                                                          */
 /* ------------------------------------------------------------------ */
 
 const DESENHOS: Record<string, () => ReactNode> = {
   autorizacao: Autorizacao,
+  balanca: Balanca,
   "barra-ferro": BarraFerro,
   bateria: Bateria,
   "bateria-bike": BateriaBike,
@@ -550,10 +631,12 @@ const DESENHOS: Record<string, () => ReactNode> = {
   desligar: Desligar,
   desmontar: Desmontar,
   dinheiro: Dinheiro,
+  facas: Facas,
   "fechar-caixa": FecharCaixa,
   freio: Freio,
   gelo: Gelo,
   guardar: Guardar,
+  headphones: Headphones,
   horario: Horario,
   limpar: Limpar,
   local: Local,
@@ -563,11 +646,13 @@ const DESENHOS: Record<string, () => ReactNode> = {
   "parar-pedidos": PararPedidos,
   "recipiente-chocolate": RecipienteChocolate,
   "saco-lixo": SacoLixo,
+  tabua: Tabua,
   tampa: Tampa,
   "teto-solar": TetoSolar,
   topping: Topping,
   tripe: Tripe,
   twint: Twint,
+  uniforme: Uniforme,
 };
 
 /**

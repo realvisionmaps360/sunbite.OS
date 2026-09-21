@@ -111,6 +111,14 @@ const ROWS = {
     ["preparacao", "Gelo no congelador na véspera", "Eis am Vortag ins Gefrierfach gelegt", "congelador", false],
     ["preparacao", "Material/QR Code TWINT", "TWINT-Material/QR-Code", "twint", false],
     ["preparacao", "4 barras de ferro", "4 Eisenstangen", "barra-ferro", false],
+    // Os cinco de 21/09 (B1). Espelham as linhas que entraram no banco: item
+    // novo no banco e desenho novo no codigo nao aparecem aqui sozinhos, e o
+    // preview e o unico lugar onde eu vejo a aba antes de publicar.
+    ["preparacao", "Headphones", "Kopfhörer", "headphones", false],
+    ["preparacao", "Uniforme (camiseta e chapéu)", "Uniform (T-Shirt und Hut)", "uniforme", false],
+    ["preparacao", "2 facas", "2 Messer", "facas", false],
+    ["preparacao", "Tábua de madeira", "Holzbrett", "tabua", false],
+    ["preparacao", "Balança de medição", "Waage", "balanca", false],
     ["saida", "Local confirmado", "Standort bestätigt", "local", false],
     ["saida", "Horário confirmado", "Uhrzeit bestätigt", "horario", false],
     ["saida", "Autorização verificada", "Bewilligung geprüft", "autorizacao", true],
