@@ -5,10 +5,23 @@ import { today } from "../db";
 import { money } from "../config";
 import { useLang } from "../i18n";
 import { flushOutbox, queueWrite } from "../outbox";
-import { AdminHeader, Aviso, CardToggle, GridCards, Linha, StatusPill, Tile, TileButton } from "./ui";
+import {
+  AdminHeader,
+  Aviso,
+  CardToggle,
+  GridCards,
+  Linha,
+  StatusPill,
+  Tile,
+  TileButton,
+} from "./ui";
 import { Ilustracao } from "./ilustracoes";
+import { FolhaDoResumo } from "./ResumoDoDia";
+import { hora, type ResumoDoDia } from "../resumo";
 import {
   cacheOpenOperationView,
+  consumirVistaPedida,
+  limparCacheOperacaoAberta,
   phaseFor,
   type ChecklistStateRow,
   type ChecklistTemplate,
@@ -38,6 +51,20 @@ const JANELA_TOQUE_LOCAL_MS = 10_000;
 
 /** O que a Romana acabou de tocar, e quando. Chave: `template_id`. */
 type ToqueLocal = { checked: boolean; em: number };
+
+/**
+ * A venda como o fechamento e o resumo do dia precisam dela. `cup_count` e
+ * `created_at` existem so para o resumo (copos e ritmo); o resto e o que
+ * `expectedCash` ja lia.
+ */
+interface VendaDoResumo {
+  total: number;
+  payment: string;
+  cancelled: boolean;
+  tip: number | null;
+  cup_count: number;
+  created_at: string;
+}
 
 /**
  * Tira do mapa o que ja nao precisa vencer o servidor: o toque que passou da
@@ -130,7 +157,13 @@ function OperationBody({
    * mudanca de estado — no meio do toque da Romana. Agora quem navega e so
    * o dedo dela.
    */
-  const [vista, setVista] = useState<Phase | null>(null);
+  const [vista, setVista] = useState<Phase | null>(() => consumirVistaPedida());
+  /** Vendas da operacao do dia — alimentam o caixa esperado e o resumo. */
+  const [vendas, setVendas] = useState<VendaDoResumo[]>([]);
+  /** Quantas vendas de hoje ficaram sem operacao amarrada. So informa. */
+  const [orfas, setOrfas] = useState(0);
+  /** A folha do dia encerrado. Nao vem do `load()` — ver `ResumoDoDia`. */
+  const [resumo, setResumo] = useState<ResumoDoDia | null>(null);
   /** Recado do erro suave da trava. Some sozinho; nunca bloqueia toque. */
   const [aviso, setAviso] = useState<string | null>(null);
   /**
@@ -179,6 +212,18 @@ function OperationBody({
         .order("created_at", { ascending: false })
         .limit(1);
       /**
+       * A operacao ja encerrada de hoje (ops 24). Ate aqui ela era invisivel
+       * para esta tela — o filtro acima a descartava — e o efeito era que
+       * encerrar o dia devolvia "Nenhuma operacao em andamento" com um botao
+       * de comecar outra, como se o toque nao tivesse funcionado.
+       */
+      const { data: fechada } = await supabase
+        .from("operations")
+        .select("*")
+        .eq("local_date", today())
+        .eq("status", "closed")
+        .limit(1);
+      /**
        * Uma operacao PLANEJADA de um dia anterior nao serve para hoje: ela
        * ficou para tras. Foi assim que o domingo 06/09 caiu inteiro dentro da
        * operacao criada em 04/09 — checklist, e depois as vendas — herdando a
@@ -189,10 +234,15 @@ function OperationBody({
        * ser fechado. Nada pode deixar a Romana sem caminho de volta.
        */
       const encontrada = (op?.[0] as Operation | undefined) ?? null;
-      const current =
+      const emAndamento =
         encontrada && encontrada.status === "planned" && encontrada.local_date !== today()
           ? null
           : encontrada;
+      // Sem operacao em andamento, a do dia passa a ser a ja encerrada de
+      // hoje: e ela que alimenta o "encerrada as HH:MM · ver resumo" e deixa
+      // o resumo ser reaberto depois. `status === "closed"` e o que a tela usa
+      // para nao oferecer os botoes de abrir e fechar de novo.
+      const current = emAndamento ?? ((fechada?.[0] as Operation | undefined) ?? null);
       setOperation(current);
 
       if (current) {
@@ -210,17 +260,33 @@ function OperationBody({
 
         // Caixa esperado: le o que ja existe nas duas tabelas, sem redigitar
         // nada. Venda cancelada nao entra — a mesma regra do resto do app.
-        const [{ data: sl }, { data: ex }] = await Promise.all([
+        //
+        // `cup_count` e `created_at` entram por causa do resumo do dia
+        // (ops 24): copos vendidos e o ritmo em copos/hora. Duas colunas a
+        // mais no mesmo select, sem consulta nova e sem mudanca de banco.
+        const [{ data: sl }, { data: ex }, { data: todasDoDia }] = await Promise.all([
           supabase
             .from("sales")
-            .select("total,payment,cancelled,tip")
+            .select("total,payment,cancelled,tip,cup_count,created_at")
             .eq("operation_id", current.id),
           supabase.from("expenses").select("type,value").eq("operation_id", current.id),
+          // Vendas de hoje sem operacao amarrada. Traz as do dia inteiro e
+          // filtra aqui de proposito: `.is("operation_id", null)` seria uma
+          // forma nova de consulta para o mock do `.preview/` aprender, e o
+          // dia tem dezenas de linhas, nao milhares.
+          supabase.from("sales").select("id,operation_id").eq("local_date", today()),
         ]);
+        const vendasDaOperacao = (sl as VendaDoResumo[] | null) ?? [];
+        setVendas(vendasDaOperacao);
+        setOrfas(
+          ((todasDoDia as { id: string; operation_id: string | null }[] | null) ?? []).filter(
+            (linha) => !linha.operation_id,
+          ).length,
+        );
         setExpected(
           expectedCash(
             current,
-            (sl as { total: number; payment: string; cancelled: boolean; tip: number | null }[]) ?? [],
+            vendasDaOperacao,
             (ex as { type: string; value: number }[]) ?? [],
           ),
         );
@@ -228,6 +294,8 @@ function OperationBody({
         toquesRecentes.current.clear();
         setStates([]);
         setExpected(null);
+        setVendas([]);
+        setOrfas(0);
       }
 
       const { data: pend } = await supabase
@@ -305,6 +373,32 @@ function OperationBody({
   }, [aviso]);
 
   async function startOperation() {
+    /**
+     * Antes de criar, procura uma operacao de hoje que ja exista (ops 24).
+     *
+     * Sem isto, um toque aqui num dia que ja tem operacao cria a segunda —
+     * `operations` nao tem restricao nenhuma de unicidade por data (so o
+     * `status_check` e as chaves estrangeiras). Foi assim que 21/09 e 22/09
+     * ficaram com operacoes vazias penduradas no banco, inalcancaveis pela
+     * tela, porque operacao planejada de dia anterior e ignorada no `load()`.
+     */
+    try {
+      const supabase = await getSupabase();
+      const { data: jaExiste } = await supabase
+        .from("operations")
+        .select("*")
+        .eq("local_date", today())
+        .limit(1);
+      const doDia = (jaExiste?.[0] as Operation | undefined) ?? null;
+      if (doDia) {
+        setOperation(doDia);
+        return;
+      }
+    } catch {
+      // Offline: segue e cria. A fila cuida do resto, e o dia sem operacao e
+      // pior do que o risco de uma duplicata que da para juntar depois.
+    }
+
     const row: Operation = {
       id: crypto.randomUUID(),
       local_date: today(),
@@ -402,18 +496,35 @@ function OperationBody({
    */
   async function closeOperation() {
     if (!operation) return;
-    const contado = cashFinal ? Number(cashFinal) : null;
+    const contado = contadoAgora;
     const diff = diferenca;
 
+    // As duas travas do encerramento, e so elas. Contar o dinheiro e decisao
+    // do Felipe de 22/09: dia que fecha sem contagem vira buraco de caixa que
+    // so aparece semanas depois, quando o numero seguinte nao bate.
+    if (contado === null) return;
     if (diff !== null && diff !== 0 && !closeReason.trim()) return;
+
+    const fim = new Date().toISOString();
+    const semAbertura = operation.status !== "open" || !operation.opened_at;
+    const primeiraVenda = vendas
+      .filter((v) => !v.cancelled)
+      .map((v) => v.created_at)
+      .sort()[0];
+    const inicio = operation.opened_at ?? primeiraVenda ?? null;
 
     await salvarOperacao({
       id: operation.id,
       status: "closed",
       closed_by: identity.userId,
-      closed_at: new Date().toISOString(),
+      closed_at: fim,
       cash_final: contado,
     });
+
+    // A Home e o carimbo da venda leem o cache, nao o banco. Esquecer aqui
+    // evita "Encerrar o dia" num dia ja encerrado e venda nova amarrada a uma
+    // operacao fechada.
+    await limparCacheOperacaoAberta();
 
     if (diff !== null && diff !== 0) {
       try {
@@ -431,8 +542,102 @@ function OperationBody({
         // Sem rede na hora do fechamento: a operacao ja fechou pela fila, e o
         // ajuste fica registrado no motivo. Nao vale travar o encerramento.
       }
-      setCloseReason("");
     }
+
+    /**
+     * Dia encerrado sem ter sido aberto vira ocorrencia (decisao do Felipe,
+     * 22/09: "encerra do mesmo jeito e marca a falha").
+     *
+     * Ocorrencia, e nao coluna nova: `pendencies` ja existe, ja aparece na
+     * propria tela de Operacao e ja tem `operation_id`. Coluna nova custaria
+     * SQL em producao antes do deploy — o risco conhecido da Fatia 3 — para
+     * guardar o que esta lista guarda de graca.
+     */
+    if (semAbertura) {
+      const ocorrencia: Pendency = {
+        id: crypto.randomUUID(),
+        description: t("close.noOpeningPendency"),
+        critical: false,
+        status: "aberta",
+        origin: "encerramento",
+        operation_id: operation.id,
+        created_by: identity.userId,
+        created_at: new Date().toISOString(),
+        resolved_by: null,
+        resolved_at: null,
+      };
+      setPendencies((prev) => [ocorrencia, ...prev]);
+      await queueWrite("pendencies", ocorrencia);
+    }
+
+    setResumo({
+      inicio,
+      inicioEstimado: !operation.opened_at && !!primeiraVenda,
+      fim,
+      placeName: places.find((p) => p.id === operation.place_id)?.name ?? null,
+      eventName: nomeDoEvento(events.find((e) => e.id === operation.event_id)),
+      cups: ativas.reduce((n, v) => n + (v.cup_count ?? 0), 0),
+      vendas: ativas.length,
+      revenue: ativas.reduce((n, v) => n + Number(v.total), 0),
+      cash: expected?.cashSales ?? 0,
+      twint: expected?.twintSales ?? 0,
+      tips: (expected?.cashTips ?? 0) + (expected?.twintTips ?? 0),
+      expected,
+      counted: contado,
+      diff,
+      reason: closeReason.trim(),
+      semAbertura,
+      orfas,
+      online: navigator.onLine,
+    });
+    setCloseReason("");
+  }
+
+  /** O nome do evento no idioma da tela, ou nulo quando nao ha evento. */
+  function nomeDoEvento(ev: SunbiteEvent | undefined): string | null {
+    if (!ev) return null;
+    return (lang === "de" ? ev.label_de : ev.label_en) || t("operation.event");
+  }
+
+  /**
+   * Remonta o resumo de um dia que ja estava encerrado quando a tela abriu —
+   * o caminho do "ver resumo", diferente do resumo que nasce no toque em
+   * encerrar. Os numeros sao os mesmos, e vem todos do `load()`: a operacao
+   * fechada de hoje e as vendas dela.
+   *
+   * O motivo da diferenca nao entra aqui: ele foi gravado como lancamento no
+   * Financeiro, e repeti-lo de cabeca seria inventar. A linha da diferenca
+   * continua aparecendo.
+   */
+  function abrirResumoDoFechado() {
+    if (!operation || operation.status !== "closed") return;
+    const fim = operation.closed_at ?? new Date().toISOString();
+    const primeiraVenda = ativas.map((v) => v.created_at).sort()[0];
+    const contadoNoFechamento =
+      operation.cash_final === null ? null : Number(operation.cash_final);
+    setResumo({
+      inicio: operation.opened_at ?? primeiraVenda ?? null,
+      inicioEstimado: !operation.opened_at && !!primeiraVenda,
+      fim,
+      placeName: places.find((p) => p.id === operation.place_id)?.name ?? null,
+      eventName: nomeDoEvento(events.find((e) => e.id === operation.event_id)),
+      cups: ativas.reduce((n, v) => n + (v.cup_count ?? 0), 0),
+      vendas: ativas.length,
+      revenue: ativas.reduce((n, v) => n + Number(v.total), 0),
+      cash: expected?.cashSales ?? 0,
+      twint: expected?.twintSales ?? 0,
+      tips: (expected?.cashTips ?? 0) + (expected?.twintTips ?? 0),
+      expected,
+      counted: contadoNoFechamento,
+      diff:
+        expected && contadoNoFechamento !== null
+          ? rappen(contadoNoFechamento - expected.expected)
+          : null,
+      reason: "",
+      semAbertura: !operation.opened_at,
+      orfas,
+      online: navigator.onLine,
+    });
   }
 
   /** Chega pronta da folha de Ocorrencia — aqui so entra na lista da tela. */
@@ -451,13 +656,20 @@ function OperationBody({
     await queueWrite("pendencies", patch);
   }
 
-  const contado = cashFinal.trim() === "" ? null : Number(cashFinal);
+  /**
+   * O dinheiro contado. Nulo tanto para campo vazio quanto para texto que nao
+   * vira numero — os dois casos significam a mesma coisa para o encerramento:
+   * ninguem contou ainda.
+   */
+  const contadoBruto = cashFinal.trim() === "" ? null : Number(cashFinal);
+  const contadoAgora =
+    contadoBruto !== null && Number.isFinite(contadoBruto) ? contadoBruto : null;
   /** Nulo enquanto nao da para comparar — sem esperado ou sem contado. */
   const diferenca =
-    expected && contado !== null && Number.isFinite(contado)
-      ? rappen(contado - expected.expected)
-      : null;
+    expected && contadoAgora !== null ? rappen(contadoAgora - expected.expected) : null;
   const precisaMotivo = diferenca !== null && diferenca !== 0;
+  /** Vendas que contam: canceladas ficam de fora, aqui como no resto do app. */
+  const ativas = vendas.filter((v) => !v.cancelled);
 
 
   const stateByTemplate = new Map(states.map((s) => [s.template_id, s]));
@@ -573,6 +785,10 @@ function OperationBody({
       {/* ---------- A grade das quatro fases (estilo Home V2) ---------- */}
       {!loading && operation && vista === null && (
         <div className="flex-1 space-y-5 bg-brand p-4">
+          {operation.status === "closed" && (
+            <CardEncerrada operation={operation} onVerResumo={abrirResumoDoFechado} />
+          )}
+
           <GridCards>
             {PHASES.map((p) => {
               const { feitos, total } = progresso(p);
@@ -779,9 +995,20 @@ function OperationBody({
             </div>
           )}
 
-          {vista === "encerramento" && operation.status === "open" && (
+          {/* O encerramento aparece com a operacao ABERTA ou PLANEJADA
+              (ops 24). Ate aqui a condicao era so `=== "open"`, e o dia que
+              ninguem "abriu" chegava no Encerramento e encontrava apenas o
+              checklist — sem botao nenhum para dizer que acabou. Foi o que
+              aconteceu na feira de 18/09. */}
+          {vista === "encerramento" && operation.status !== "closed" && (
             <div className="space-y-3 rounded-2xl bg-cream p-4">
               <h2 className="font-display text-xl">{t("close.title")}</h2>
+
+              {operation.status === "planned" && (
+                <p className="rounded-xl bg-brand/10 p-3 text-sm leading-relaxed text-brand-dark">
+                  {t("close.neverOpened")}
+                </p>
+              )}
 
               <label className="block text-sm font-semibold">{t("operation.cashFinal")}</label>
               <input
@@ -800,7 +1027,7 @@ function OperationBody({
                   <Linha label={t("close.expected")} value={money(expected.expected)} />
                   <Linha
                     label={t("close.counted")}
-                    value={contado === null ? "—" : money(contado)}
+                    value={contadoAgora === null ? "—" : money(contadoAgora)}
                   />
                   <Linha
                     label={t("close.difference")}
@@ -848,17 +1075,29 @@ function OperationBody({
                 </>
               )}
 
-              {/* Sem trava de fase aqui: fechar o caixa nunca depende do
-                  checklist. A unica confirmacao do app continua sendo o
-                  motivo escrito quando a diferenca nao e zero (decisao 7). */}
+              {/* Sem trava de fase aqui: encerrar o dia nunca depende do
+                  checklist. As travas sao duas, e as duas sao do fechamento:
+                  contar o dinheiro (ops 24) e escrever o motivo quando a
+                  diferenca nao e zero (decisao 7). */}
+              {contadoAgora === null && (
+                <p className="text-sm font-semibold text-red-800">{t("close.countedRequired")}</p>
+              )}
               <button
                 onClick={() => void closeOperation()}
-                disabled={precisaMotivo && !closeReason.trim()}
+                disabled={contadoAgora === null || (precisaMotivo && !closeReason.trim())}
                 className="w-full rounded-2xl bg-brand py-4 font-semibold text-cream disabled:opacity-40"
               >
                 {t("close.confirm")}
               </button>
             </div>
+          )}
+
+          {/* Dia ja encerrado: o resumo continua a um toque. Sem isto, sair da
+              folha e voltar a esta tela daria "Nenhuma operacao em andamento",
+              que e exatamente a resposta que fazia o encerramento parecer nao
+              ter funcionado. */}
+          {vista === "encerramento" && operation.status === "closed" && (
+            <CardEncerrada operation={operation} onVerResumo={abrirResumoDoFechado} />
           )}
 
           {/* Avancar de fase. Fica no fim de tudo para nao disputar o olho com
@@ -896,6 +1135,37 @@ function OperationBody({
           onSaved={onOccurrenceSaved}
         />
       )}
+
+      {resumo && <FolhaDoResumo resumo={resumo} onClose={() => setResumo(null)} />}
     </div>
+  );
+}
+
+/**
+ * "Operacao de hoje encerrada as 23:27 · ver resumo".
+ *
+ * Existe para responder ao toque que encerra o dia. Antes da ops 24 a
+ * operacao fechada sumia da tela e o que aparecia era "Nenhuma operacao em
+ * andamento" com um botao de comecar outra — resposta que parece falha, e que
+ * convida a criar a operacao fantasma seguinte.
+ */
+function CardEncerrada({
+  operation,
+  onVerResumo,
+}: {
+  operation: Operation;
+  onVerResumo: () => void;
+}) {
+  const { t } = useLang();
+  return (
+    // `bg-cream`, e nao `cream-soft`: dentro da fase o fundo ja e cream-soft
+    // e o card sumia — o texto ficava solto no meio da tela, sem parecer um
+    // bloco. Na grade, sobre o vermelho, os dois funcionariam.
+    <section className="space-y-3 rounded-3xl bg-cream p-4">
+      <p className="font-display text-lg leading-tight break-words">
+        {t("summary.closedAt", { time: hora(operation.closed_at) })}
+      </p>
+      <TileButton emoji="📄" label={t("summary.view")} variant="dashed" onClick={onVerResumo} />
+    </section>
   );
 }

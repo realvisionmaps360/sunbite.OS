@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { LangToggle, useLang } from "../i18n";
 import { SunbiteLogo } from "./SunbiteLogo";
 import { allSales, today } from "../db";
-import { getCachedOpenOperation, type OpenOperationView } from "../operations";
+import { getCachedOpenOperation, pedirVista, type OpenOperationView } from "../operations";
 import { isActive } from "../types";
 import { Valor } from "./Valor";
 import type { Screen } from "../App";
@@ -124,6 +124,28 @@ export function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) 
           {aberta ? t("home.keepSelling") : t("home.startOp")}
         </button>
       </div>
+
+      {/* Encerrar o dia, a dois toques do ultimo morango (ops 24). Secundario
+          de proposito: a acao principal continua sendo vender.
+
+          ⚠️ Este botao so NAVEGA. Esta tela nao importa "../supabase" nem
+          "../auth", e e essa ausencia — nao um `if` — que garante a decisao 1.
+          O pedido de abrir direto no Encerramento viaja por `pedirVista`, que
+          mora no modulo puro "../operations", o mesmo de onde ja vem o cache
+          lido aqui em cima. */}
+      {aberta && (
+        <div className="px-4 pb-3">
+          <button
+            onClick={() => {
+              pedirVista("encerramento");
+              onNavigate("operation");
+            }}
+            className="min-h-[44px] w-full rounded-2xl border-2 border-cream/40 py-3 font-display text-xl leading-tight break-words text-cream transition active:scale-[0.99]"
+          >
+            {t("operation.close")}
+          </button>
+        </div>
+      )}
 
       {/* Resumo do dia (§4.4). "Dinheiro" e o que entrou em cash hoje, nao o
           caixa fisico: o caixa depende de `cash_initial`, que a Etapa 6 fechou

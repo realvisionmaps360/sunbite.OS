@@ -158,6 +158,25 @@ export async function cacheOpenOperationView(
   }
 }
 
+/**
+ * Esquece a operacao aberta **na hora**, sem esperar o proximo ciclo de
+ * sincronizacao (ops 24).
+ *
+ * Chamada pelo encerramento. Sem isto o cache continua apontando para a
+ * operacao que acabou de fechar por ate dois minutos, e nesse intervalo duas
+ * coisas ficam erradas: a Home mostra "Encerrar o dia" para um dia ja
+ * encerrado, e uma venda registrada depois do fechamento sai carimbada com o
+ * `operation_id` da operacao fechada.
+ */
+export async function limparCacheOperacaoAberta(): Promise<void> {
+  try {
+    await deleteCache(OPEN_OP_CACHE_KEY);
+    await deleteCache(OPEN_OP_VIEW_KEY);
+  } catch {
+    // O proximo refreshOpenOperationId corrige. Nao vale travar o encerramento.
+  }
+}
+
 /** Lido pela Home. Devolve nulo quando nao ha operacao aberta. */
 export async function getCachedOpenOperation(): Promise<OpenOperationView | null> {
   return (await getCache<OpenOperationView>(OPEN_OP_VIEW_KEY)) ?? null;
@@ -166,4 +185,36 @@ export async function getCachedOpenOperation(): Promise<OpenOperationView | null
 /** Lido ao gravar uma venda — carimba operation_id mesmo offline. */
 export async function getCachedOpenOperationId(): Promise<string | null> {
   return (await getCache<string>(OPEN_OP_CACHE_KEY)) ?? null;
+}
+
+/**
+ * Em que fase a tela de Operacao deve abrir, quando alguem pediu de fora.
+ *
+ * Existe por causa do botao "Encerrar o dia" da Home (ops 24): ela precisa
+ * mandar a tela de Operacao abrir direto no Encerramento, e nao pode fazer
+ * isso por prop — `LAZY_SCREENS` em App.tsx da a todas as telas a mesma
+ * assinatura (`onClose`), e alargar isso mexeria em dez telas para servir a
+ * uma.
+ *
+ * ⚠️ Mora aqui, e nao num estado de App.tsx, porque este modulo e **puro**:
+ * nao importa `./supabase` nem `./auth`. E o mesmo motivo pelo qual o cache da
+ * operacao aberta mora aqui — a Home le deste arquivo sem arrastar peso nenhum
+ * para o caminho da venda.
+ *
+ * Variavel de modulo, nao `localStorage`: o pedido vale para a proxima
+ * montagem da tela e mais nada. Sobreviver a um recarregar seria defeito —
+ * abrir o app amanha cairia no Encerramento sem ninguem ter pedido.
+ */
+let vistaPedida: Phase | null = null;
+
+/** A Home chama antes de navegar. */
+export function pedirVista(fase: Phase): void {
+  vistaPedida = fase;
+}
+
+/** A tela de Operacao chama ao montar. Le **uma vez**: o pedido se gasta. */
+export function consumirVistaPedida(): Phase | null {
+  const pedida = vistaPedida;
+  vistaPedida = null;
+  return pedida;
 }

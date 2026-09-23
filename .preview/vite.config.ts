@@ -24,6 +24,9 @@ export async function login() {}
 export async function logout() {}
 `;
 
+/** A data de hoje, que varias linhas do mock precisam repetir. */
+const HOJE = new Date().toISOString().slice(0, 10);
+
 const ROWS = {
   expenses: [
     { id: "e1", type: "despesa", category: "ingredientes", description: "Erdbeeren / Morangos 6 kg", value: 1234.5, occurred_at: "2026-08-26", operation_id: "op1", created_by: null, created_at: "" },
@@ -48,7 +51,12 @@ const ROWS = {
       cash_initial: 1234.5,
       cash_final: null,
       opened_by: "u-teste",
-      opened_at: "2026-08-28T09:12:00Z",
+      // ⚠️ Aberta QUATRO HORAS ATRAS, nao numa data fixa de agosto nem numa
+      // hora fixa de hoje. Com a data velha o resumo do dia (ops 24) mostrava
+      // "599h 44min" e um ritmo de zero copos por hora; com hora fixa, meia
+      // manha adianta a abertura e a duracao sai negativa, sumindo do resumo.
+      // Relativo ao relogio, a feira sempre tem quatro horas de duracao.
+      opened_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
       closed_by: null,
       closed_at: null,
       created_at: "2026-08-28T08:00:00Z",
@@ -134,7 +142,9 @@ const ROWS = {
     ["encerramento", "Contabilizar ingredientes restantes", "Restliche Zutaten zählen", "contar-ingredientes", false],
     ["encerramento", "Identificar produto descartável", "Nicht mehr verwendbares Produkt identifizieren", "descartar", false],
     ["encerramento", "Guardar produto aproveitável de forma segura", "Verwendbares Produkt sicher verstauen", "guardar", false],
-    ["encerramento", "Fechar caixa", "Kasse abschliessen", "fechar-caixa", false],
+    // Rotulo trocado na ops 24, ja no banco: "Fechar caixa" era o nome do
+    // quadradinho E do bloco que fecha de verdade, logo abaixo na mesma tela.
+    ["encerramento", "Conferir o dinheiro da caixa", "Bargeld zählen", "fechar-caixa", false],
     ["encerramento", "Conferir TWINT", "TWINT prüfen", "conferir-twint", false],
     ["encerramento", "Desligar equipamentos", "Geräte ausschalten", "desligar", false],
     ["encerramento", "Limpar superfícies", "Flächen reinigen", "limpar", false],
@@ -158,13 +168,28 @@ const ROWS = {
   // em producao. As duas ultimas sao da vez ANTERIOR no mesmo local (op0,
   // fechada), que e o que a folha do evento resume em "da ultima vez aqui";
   // a cancelada entra de proposito: ela nao pode contar.
+  // ⚠️ `created_at`, `tip` e `local_date` entraram na ops 24. O resumo do dia
+  // le os tres: hora da primeira venda (o inicio estimado de um dia que nunca
+  // foi aberto), gorjeta, e as vendas de hoje que ficaram SEM operacao
+  // amarrada — que e o estrago de 18/09 e o unico aviso do resumo que depende
+  // de dado, nao de estado. sv7 e sv8 existem exatamente para isso.
   sales: [
-    { id: "sv1", operation_id: "op1", cup_count: 3, total: 1234.5, payment: "cash", cancelled: false },
-    { id: "sv2", operation_id: "op1", cup_count: 2, total: 1234.5, payment: "twint", cancelled: false },
-    { id: "sv3", operation_id: "op1", cup_count: 9, total: 99, payment: "cash", cancelled: true },
-    { id: "sv4", operation_id: "op0", cup_count: 3, total: 24.5, payment: "cash", cancelled: false },
-    { id: "sv5", operation_id: "op0", cup_count: 2, total: 1234.5, payment: "twint", cancelled: false },
-    { id: "sv6", operation_id: "op0", cup_count: 9, total: 99, payment: "cash", cancelled: true },
+    // ⚠️ Horas relativas ao relogio, nao fixas: venda com hora fixa de tarde
+    // fotografada de manha vira "primeira venda depois do fechamento", e o
+    // resumo de um dia sem abertura (que estima o inicio pela primeira venda)
+    // sai com o periodo de tras para frente.
+    { id: "sv1", operation_id: "op1", cup_count: 3, total: 1234.5, payment: "cash", cancelled: false, tip: 2, created_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString(), local_date: HOJE },
+    { id: "sv2", operation_id: "op1", cup_count: 2, total: 1234.5, payment: "twint", cancelled: false, tip: 0, created_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), local_date: HOJE },
+    { id: "sv3", operation_id: "op1", cup_count: 9, total: 99, payment: "cash", cancelled: true, tip: 0, created_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(), local_date: HOJE },
+    { id: "sv7", operation_id: null, cup_count: 2, total: 15, payment: "cash", cancelled: false, tip: 0, created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(), local_date: HOJE },
+    { id: "sv8", operation_id: null, cup_count: 1, total: 7.5, payment: "twint", cancelled: false, tip: 0, created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(), local_date: HOJE },
+    { id: "sv4", operation_id: "op0", cup_count: 3, total: 24.5, payment: "cash", cancelled: false, tip: 0, created_at: "2026-08-22T10:00:00Z", local_date: "2026-08-22" },
+    { id: "sv5", operation_id: "op0", cup_count: 2, total: 1234.5, payment: "twint", cancelled: false, tip: 0, created_at: "2026-08-22T11:00:00Z", local_date: "2026-08-22" },
+    // Um dia SEM operacao registrada (como 22/08 em producao): a folha tem
+    // que abrir com o que existe e dizer que nao houve operacao.
+    { id: "sv9", operation_id: null, cup_count: 2, total: 16, payment: "cash", cancelled: false, tip: 0, created_at: "2026-09-04T14:00:00Z", local_date: "2026-09-04" },
+    { id: "sv10", operation_id: null, cup_count: 1, total: 7.5, payment: "twint", cancelled: false, tip: 0, created_at: "2026-09-04T16:30:00Z", local_date: "2026-09-04" },
+    { id: "sv6", operation_id: "op0", cup_count: 9, total: 99, payment: "cash", cancelled: true, tip: 0, created_at: "2026-08-22T12:00:00Z", local_date: "2026-08-22" },
   ],
   // Fatia 5. Os numeros saem do teste em Postgres de verdade (PGlite), mais
   // dois casos que a tela precisa saber mostrar: item fora da ficha, e item
@@ -301,6 +326,9 @@ const _refuse = new URLSearchParams(location.search).get("refuse");
  * estado em que o campo do caixa inicial e o botao "Abrir operacao" aparecem.
  * ?opstatus=ontem devolve a de um dia anterior ainda planejada, que e a
  * armadilha que fez o domingo cair na operacao de 04/09.
+ * ?opstatus=closed devolve o dia de hoje JA ENCERRADO (ops 24) — o estado do
+ * "encerrada as HH:MM · ver resumo", que nao existia antes porque a operacao
+ * fechada era descartada pela tela.
  */
 const _op = new URLSearchParams(location.search).get("opstatus");
 if (_op === "planned" || _op === "ontem") {
@@ -310,6 +338,13 @@ if (_op === "planned" || _op === "ontem") {
   op.opened_at = null;
   op.opened_by = null;
   if (_op === "ontem") op.local_date = "2026-09-04";
+}
+if (_op === "closed") {
+  const op = ROWS.operations[0];
+  op.status = "closed";
+  op.cash_final = 1234.5;
+  op.closed_by = "u-teste";
+  op.closed_at = new Date().toISOString();
 }
 
 const result = (table) => {
@@ -458,15 +493,31 @@ import OperationScreen from "./components/OperationScreen.tsx";
 import EquipmentScreen from "./components/EquipmentScreen.tsx";
 import SuppliersScreen from "./components/SuppliersScreen.tsx";
 import PlacesScreen from "./components/PlacesScreen.tsx";
+// ops 24: Vendas entra aqui por causa da aba Por dia, que agora le os dias do
+// SERVIDOR (so com sessao) e abre o resumo de cada dia. A lista do aparelho
+// continua vindo do IndexedDB de verdade; o que vem do mock e o servidor.
+import { SalesScreen } from "./components/SalesScreen.tsx";
+const SalesPreview = ({ onClose }) => <SalesScreen onClose={onClose} onDataChanged={() => {}} />;
 import { LangProvider } from "./i18n.tsx";
+// ops 24: a MESMA funcao que o botao "Encerrar o dia" da Home chama antes de
+// navegar. E o unico jeito de ver aqui o que a Home faz — ela nao entra neste
+// preview (nao exige sessao) e no app de verdade a tela de Operacao para no
+// login antes de mostrar a fase.
+import { pedirVista } from "./operations.ts";
 
 // Abre direto na tela do ?screen=, no idioma do ?lang= — o unico jeito de
 // fotografar sem sessao no Supabase. Nada disto existe no app real.
 const params = new URLSearchParams(location.search);
 const lang = params.get("lang");
 if (lang === "de" || lang === "pt") localStorage.setItem("sunbite.lang", lang);
-const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen, equipment: EquipmentScreen, suppliers: SuppliersScreen, places: PlacesScreen };
+const SCREENS = { stock: StockScreen, ai: AIScreen, finance: FinanceScreen, operation: OperationScreen, equipment: EquipmentScreen, suppliers: SuppliersScreen, places: PlacesScreen, sales: SalesPreview };
 const Tela = SCREENS[params.get("screen")] ?? FinanceScreen;
+
+// ?vista=encerramento reproduz o atalho da Home: pede a fase ANTES de montar
+// a tela, exatamente como o botao de la faz, e a tela tem que abrir direto
+// nela — sem passar pela grade e sem a trava de hierarquia barrar.
+const vistaPedida = params.get("vista");
+if (vistaPedida) pedirVista(vistaPedida);
 
 // ?click=N abre sozinho o N-esimo "?" da tela, para fotografar a caixinha
 // do tutorial sem um dedo humano.

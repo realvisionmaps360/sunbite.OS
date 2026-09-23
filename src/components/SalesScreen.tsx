@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { TOPPINGS, money, toppingEmoji } from "../config";
 import { allSales, cancelSale, correctSale, today } from "../db";
 import { LangToggle, useLang } from "../i18n";
-import { byDay, shortDate, summarize, toppingRanking } from "../sales";
+import { byDay, shortDate, summarize, toppingRanking, type DayRow } from "../sales";
+import { FolhaDoResumo } from "./ResumoDoDia";
+import { resumoLocal, type ResumoDoDia } from "../resumo";
 import { syncNow } from "../sync";
 import { Valor } from "./Valor";
 import { isActive, isCorrected, tipOf, type Payment, type Sale } from "../types";
@@ -106,9 +108,16 @@ export function SalesScreen({
           ausencia de `./supabase` no caminho da venda — nao um `if` — que
           garante a decisao 1. O conserto e de rotulo, nao de dado. O numero do
           dia inteiro, de qualquer aparelho, vive no Financeiro. */}
-      <p className="break-words bg-brand px-4 pb-3 text-xs leading-tight text-cream/70">
-        {t("sales.device")}
-      </p>
+
+      {/* ops 24: a aba Por dia deixou de ser so deste aparelho — le os dias
+          do servidor por import() dinamico, e quando nao consegue diz isso
+          dentro da propria lista. O rotulo aqui em cima vale para as outras
+          duas, que continuam lendo so o IndexedDB. */}
+      {tab !== "days" && (
+        <p className="break-words bg-brand px-4 pb-3 text-xs leading-tight text-cream/70">
+          {t("sales.device")}
+        </p>
+      )}
 
       {tab === "today" && (
         <TodayTab
@@ -404,39 +413,110 @@ function CorrectForm({
 /* ------------------------------------------------------------- Por dia */
 
 function DaysTab({ sales }: { sales: Sale[] }) {
-  const { t } = useLang();
-  const dias = byDay(sales).filter((d) => d.sales > 0 || d.cancelled > 0);
+  const { t, lang } = useLang();
+  /**
+   * Os dias do SERVIDOR (ops 24, decisao do Felipe em 22/09): todos os
+   * aparelhos, nao so este. Nulo enquanto carrega ou quando o servidor nao
+   * respondeu (sem rede ou sem login) — ai a lista cai nos dias deste
+   * aparelho e diz isso, em vez de parecer que o outro celular nao vendeu.
+   *
+   * ⚠️ `import()` dinamico, nunca estatico: esta tela esta no pacote da
+   * venda, e "../diasServidor" importa o cliente do Supabase.
+   */
+  const [doServidor, setDoServidor] = useState<DayRow[] | null>(null);
+  const [tentou, setTentou] = useState(false);
+  const [aberto, setAberto] = useState<ResumoDoDia | null>(null);
+  const [carregando, setCarregando] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    if (!navigator.onLine) {
+      setTentou(true);
+      return;
+    }
+    void import("../diasServidor")
+      .then((m) => m.carregarDias())
+      .catch(() => null)
+      .then((dias) => {
+        if (!vivo) return;
+        // Lista vazia do servidor com vendas aqui quer dizer sem login: a
+        // leitura esta fechada, e o servidor responde nada em vez de erro.
+        setDoServidor(dias && (dias.length > 0 || sales.length === 0) ? dias : null);
+        setTentou(true);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [sales.length]);
+
+  const fonte = doServidor ?? byDay(sales);
+  const dias = fonte.filter((d) => d.sales > 0 || d.cancelled > 0);
+  const soLocal = tentou && doServidor === null;
+
+  async function abrir(data: string) {
+    setCarregando(data);
+    const nomeDoEvento = (ev?: { label_de: string | null; label_en: string | null }) =>
+      ev ? (lang === "de" ? ev.label_de : ev.label_en) || t("operation.event") : null;
+    let resumo: ResumoDoDia | null = null;
+    if (navigator.onLine) {
+      resumo = await import("../diasServidor")
+        .then((m) => m.carregarResumoDoDia(data, nomeDoEvento))
+        .catch(() => null);
+    }
+    // Sem servidor: abre com o que este aparelho sabe e avisa. Nunca uma
+    // folha com zeros que parecem verdade.
+    setAberto(resumo ?? resumoLocal(data, sales));
+    setCarregando(null);
+  }
 
   return (
+    <>
     <ul className="flex-1 divide-y divide-black/10 overflow-y-auto bg-cream-soft">
+      {soLocal && (
+        <li className="bg-black/5 px-4 py-2 text-center text-sm text-ink-muted">
+          {t("sales.daysLocalOnly")}
+        </li>
+      )}
       {dias.length === 0 && (
         <li className="p-6 text-center text-ink-muted">{t("sales.empty")}</li>
       )}
 
       {dias.map((d) => (
-        <li key={d.date} className="p-4">
-          <div className="flex items-baseline justify-between">
-            <span className="font-display text-2xl">{shortDate(d.date)}</span>
-            <Valor chf={d.total} tamanho="grande" className="text-right" />
-          </div>
-          <p className="mt-1 text-sm text-ink-muted">
-            {d.sales} {t("day.sales")} · {d.cups} {t("day.cups")}
-            {d.cancelled > 0 &&
-              ` · ${t(d.cancelled === 1 ? "day.cancelled" : "day.cancelled_other", {
-                n: d.cancelled,
-              })}`}
-          </p>
-          <div className="mt-2 flex gap-2 text-sm">
-            <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">
-              💵 {money(d.cash)}
-            </span>
-            <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">
-              📱 {money(d.twint)}
-            </span>
-          </div>
+        <li key={d.date}>
+          {/* O dia inteiro e o botao: tocar abre o resumo daquele dia. */}
+          <button
+            onClick={() => void abrir(d.date)}
+            disabled={carregando !== null}
+            className="block w-full p-4 text-left transition active:bg-black/5"
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-display text-2xl">{shortDate(d.date)}</span>
+              <Valor chf={d.total} tamanho="grande" className="text-right" />
+            </div>
+            <p className="mt-1 text-sm text-ink-muted">
+              {d.sales} {t("day.sales")} · {d.cups} {t("day.cups")}
+              {d.cancelled > 0 &&
+                ` · ${t(d.cancelled === 1 ? "day.cancelled" : "day.cancelled_other", {
+                  n: d.cancelled,
+                })}`}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">
+                💵 {money(d.cash)}
+              </span>
+              <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">
+                📱 {money(d.twint)}
+              </span>
+              <span className="ml-auto font-semibold text-brand">
+                {carregando === d.date ? t("sales.dayLoading") : t("sales.daySummary")} ›
+              </span>
+            </div>
+          </button>
         </li>
       ))}
     </ul>
+    {aberto && <FolhaDoResumo resumo={aberto} onClose={() => setAberto(null)} />}
+    </>
   );
 }
 

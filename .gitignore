@@ -32,3 +32,4 @@ supabase/.temp/
 # Screenshots de verificacao — prova de sessao, nao codigo.
 .shots/
 .playwright-mcp/
+.playwright-cli/
