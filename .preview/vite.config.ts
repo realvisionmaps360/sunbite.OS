@@ -307,7 +307,7 @@ ROWS.checklist_state = ROWS.checklist_templates
  * curtas de proposito: so o que ja mordeu. operations.local_date e o
  * primeiro (ops 19).
  */
-const NOT_NULL = { operations: ["local_date"] };
+const NOT_NULL = { operations: ["local_date"], pendencies: ["description"] };
 
 /**
  * ?refuse=TABELA faz TODO upsert naquela tabela responder recusa do

@@ -34,14 +34,18 @@ export async function queueWrite<T extends { id: string }>(
   row: T,
   onConflict?: string,
 ): Promise<ResultadoEscrita> {
+  const id = crypto.randomUUID();
   await enqueueOutbox({
-    id: crypto.randomUUID(),
+    id,
     table,
     row: row as unknown as Record<string, unknown>,
     onConflict,
     createdAt: new Date().toISOString(),
   });
-  return flushOutbox();
+  // So a recusa DESTA escrita volta para quem chamou (ops 25). Antes voltava
+  // a de qualquer entrada da fila: uma linha presa de outro dia aparecia na
+  // tela a cada toque novo, culpando o toque errado.
+  return flushOutbox(id);
 }
 
 let flushing = false;
@@ -58,7 +62,7 @@ let flushing = false;
  * feira inteira dizendo "operacao aberta" com o banco recusando toda gravacao
  * (o 23502 do `local_date`). Quem chama tem que poder contar isso na tela.
  */
-export async function flushOutbox(): Promise<ResultadoEscrita> {
+export async function flushOutbox(soDe?: string): Promise<ResultadoEscrita> {
   if (flushing || !navigator.onLine) return { erro: null };
   flushing = true;
   let erro: string | null = null;
@@ -71,11 +75,34 @@ export async function flushOutbox(): Promise<ResultadoEscrita> {
         const { error } = await supabase
           .from(entry.table)
           .upsert(entry.row, entry.onConflict ? { onConflict: entry.onConflict } : undefined);
-        if (error) throw new Error(error.message);
+        if (error?.code === "23502" && !entry.onConflict) {
+          /**
+           * Linha pela metade (ops 25). O upsert tenta o INSERT primeiro, e
+           * o INSERT exige todas as colunas NOT NULL — mesmo quando a linha
+           * ja existe e a intencao era so atualizar. Uma entrada assim nunca
+           * passaria: ficava presa na fila para sempre, e a recusa dela
+           * aparecia na tela a cada gravacao seguinte, como se fosse nova.
+           *
+           * Aqui ela tenta de novo como UPDATE da linha pelo `id`, que nao
+           * precisa das colunas ausentes. E o que conserta sozinho, no
+           * celular, os "Concluir" de ocorrencia que ja estao presos na fila.
+           * Se a linha nao existir, a recusa continua valendo e aparece.
+           */
+          const { id, ...resto } = entry.row;
+          const { data, error: e2 } = await supabase
+            .from(entry.table)
+            .update(resto)
+            .eq("id", id as string)
+            .select("id");
+          if (e2) throw new Error(e2.message);
+          if (!data || data.length === 0) throw new Error(error.message);
+        } else if (error) {
+          throw new Error(error.message);
+        }
         await removeOutbox(entry.id);
       } catch (e) {
-        erro = (e as Error).message;
-        void logEvent("error", `Falha ao sincronizar ${entry.table}: ${erro}`);
+        if (!soDe || entry.id === soDe) erro = (e as Error).message;
+        void logEvent("error", `Falha ao sincronizar ${entry.table}: ${(e as Error).message}`);
       }
     }
   } finally {

@@ -646,7 +646,13 @@ function OperationBody({
   }
 
   async function resolvePendency(p: Pendency) {
+    // ⚠️ A linha INTEIRA, nao so o que mudou (ops 25). A fila grava com
+    // upsert, que e um INSERT antes de virar UPDATE: sem `description` o
+    // Postgres recusa com 23502 e nada e gravado. Foi assim que nenhum
+    // "Concluir" jamais chegou ao banco — as 12 ocorrencias continuavam
+    // abertas em 23/09. O mesmo defeito do `local_date` da ops 19.
     const patch = {
+      ...p,
       id: p.id,
       status: "concluida" as const,
       resolved_by: identity.userId,
